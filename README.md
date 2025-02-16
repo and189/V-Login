@@ -1,76 +1,76 @@
 # V-Login
 
-## Architecture & Technology
+## Architektur & Technologie
 
-Our solution is based on **browserless**, a Docker container that provides a fully functional headless browser (NSTChrome) and can be accessed via a WebSocket endpoint. Instead of launching a new browser for every request, browserless efficiently manages multiple browser sessions so that only the necessary instances are activated "on demand".
+Unsere Lösung basiert auf **browserless**, einem Docker-Container, der einen voll funktionsfähigen Headless-Browser (NSTChrome) bereitstellt und über einen WebSocket-Endpunkt zugänglich ist. Anstatt für jede Anfrage einen neuen Browser zu starten, verwaltet browserless effizient mehrere Browser-Sitzungen, sodass nur die notwendigen Instanzen "on demand" aktiviert werden.
 
-### How Does Browserless Work?
+### Wie funktioniert Browserless?
 
-- **Remote DevTools & WebSocket API:**  
-  Browserless offers an API that is accessed via WebSockets. This allows remote control of the browser using the Chrome DevTools Protocol. Our application connects to this endpoint to start a browser session and use it for automated tasks.
+-   **Remote DevTools & WebSocket API:**
+    Browserless bietet eine API, die über WebSockets zugänglich ist. Dies ermöglicht die Fernsteuerung des Browsers über das Chrome DevTools Protocol. Unsere Anwendung verbindet sich mit diesem Endpunkt, um eine Browser-Sitzung zu starten und für automatisierte Aufgaben zu nutzen.
 
-- **Efficient Session Management:**  
-  Instead of launching a complete browser for every single request, browserless manages browser sessions internally. This conserves resources and enables a fast, scalable automation setup.
+-   **Effiziente Sitzungsverwaltung:**
+    Anstatt für jede einzelne Anfrage einen kompletten Browser zu starten, verwaltet browserless Browser-Sitzungen intern. Dies spart Ressourcen und ermöglicht eine schnelle, skalierbare Automatisierungseinrichtung.
 
-- **Validated Fingerprints:**  
-  The nstbrowser project includes a database of valid fingerprints and knows how to obfuscate them. This ensures that automated processes appear as human-like as possible and minimizes the chance of being blocked (e.g., by Imperva).
+-   **Validierte Fingerprints:**
+    Das nstbrowser-Projekt enthält eine Datenbank mit validen Fingerprints und weiß, wie diese verschleiert werden. Dies stellt sicher, dass automatisierte Prozesse so menschenähnlich wie möglich erscheinen und die Wahrscheinlichkeit, blockiert zu werden (z. B. durch Imperva), minimiert wird.
 
-### Why Is This Ideal for Automation?
+### Warum ist das ideal für die Automatisierung?
 
-- **Resource Efficient:**  
-  Because browserless manages multiple sessions within a single container, resources are used efficiently and separate browser instances do not have to be launched for every request.
+-   **Ressourceneffizient:**
+    Da browserless mehrere Sitzungen innerhalb eines einzelnen Containers verwaltet, werden Ressourcen effizient genutzt und es müssen nicht für jede Anfrage separate Browser-Instanzen gestartet werden.
 
-- **Fast Response Times:**  
-  Using the WebSocket API enables near-instant control of the browser, which, combined with optimized fingerprints, leads to fast and reliable automations.
+-   **Schnelle Reaktionszeiten:**
+    Die Verwendung der WebSocket-API ermöglicht eine nahezu sofortige Steuerung des Browsers, was in Kombination mit optimierten Fingerprints zu schnellen und zuverlässigen Automatisierungen führt.
 
-- **Flexibility and Scalability:**  
-  The modular architecture allows for the easy integration of additional workflows (e.g., dynamic fingerprinting and IP management). This makes the system well-suited for complex automation scenarios.
+-   **Flexibilität und Skalierbarkeit:**
+    Die modulare Architektur ermöglicht die einfache Integration zusätzlicher Workflows (z. B. dynamisches Fingerprinting und IP-Management). Dies macht das System gut geeignet für komplexe Automatisierungsszenarien.
 
-This architecture makes our solution particularly powerful – ideal for automated authentications, data extraction, and other tasks that require reliable browser interactions.
+Diese Architektur macht unsere Lösung besonders leistungsstark – ideal für automatisierte Authentifizierungen, Datenextraktionen und andere Aufgaben, die zuverlässige Browser-Interaktionen erfordern.
 
-## Prerequisites
+## Voraussetzungen
 
-Make sure the following prerequisites are met on your system:
+Stellen Sie sicher, dass die folgenden Voraussetzungen auf Ihrem System erfüllt sind:
 
-- Node.js (recommended: the latest LTS version)
-- Docker
+-   Node.js (empfohlen: die neueste LTS-Version)
+-   Docker
 
 ## Installation
 
-Follow these steps in the given order to install and run the application:
+Führen Sie die folgenden Schritte in der angegebenen Reihenfolge aus, um die Anwendung zu installieren und auszuführen:
 
-1. **Install pnpm**
+1.  **pnpm installieren**
 
-   ```bash
-   npm install -g pnpm@latest-10
-Install Dependencies
+    ```bash
+    npm install -g pnpm@latest-10
+    ```
 
----bash
-   ```bash
+2.  **Abhängigkeiten installieren**
 
-pnpm install
-Start the Browserless Docker Container
----bash
+    ```bash
+    pnpm install
+    ```
 
-Replace the TOKEN and PORT values if necessary:
+3.  **Den Browserless Docker-Container starten**
 
-   ```bash
-sudo docker run -it -e TOKEN=110e2d21-efc4-44e5-853a-9ce4099c81e1 -e PORT=8848 -p 8848:8848 --name browserless nstbrowser/browserless:130-202411051500.v2
-This container is required to provide Chrome/Puppeteer instances via a WebSocket endpoint.
----bash
+    Ersetzen Sie die Werte für `TOKEN` und `PORT` bei Bedarf:
 
-Build the V-Login Docker Image
+    ```bash
+    sudo docker run -it -e TOKEN=110e2d21-efc4-44e5-853a-9ce4099c81e1 -e PORT=8848 -p 8848:8848 --name browserless nstbrowser/browserless:130-202411051500.v2
+    ```
 
-   ```bash
+    * Dieser Container ist erforderlich, um Chrome/Puppeteer-Instanzen über einen WebSocket-Endpunkt bereitzustellen.
 
+4.  **Das V-Login Docker-Image erstellen**
 
-sudo docker build -t v-login .
-Start the V-Login Docker Container
----bash
+    ```bash
+    sudo docker build -t v-login .
+    ```
 
-This command runs the container in the host network and removes it automatically when it stops:
+5.  **Den V-Login Docker-Container starten**
 
-   ```bash
-sudo docker run --rm --network="host" v-login
----bash
+    Dieser Befehl führt den Container im Host-Netzwerk aus und entfernt ihn automatisch, wenn er stoppt:
 
+    ```bash
+    sudo docker run --rm --network="host" v-login
+    ```
