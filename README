@@ -1,6 +1,4 @@
 
----
-
 # V-Login
 
 V-Login ist eine Anwendung, die in Docker ausgeführt werden kann. Diese README-Datei beschreibt die Schritte zur Installation und Ausführung der Anwendung.
@@ -43,6 +41,4 @@ Dieses Projekt ist unter der MIT-Lizenz lizenziert. Siehe die [LICENSE](LICENSE)
 
 Bei Fragen oder Problemen kannst du dich an den Repository-Besitzer wenden: [and189](https://github.com/and189).
 
----
 
-Füge diesen Inhalt in eine neue `README.md`-Datei in deinem Repository ein.
