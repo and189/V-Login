@@ -1,19 +1,48 @@
-zusammenfassung
-Führe die folgenden Befehle in dieser Reihenfolge aus:
 
-bash
-Kopieren
+---
+
+# V-Login
+
+V-Login ist eine Anwendung, die in Docker ausgeführt werden kann. Diese README-Datei beschreibt die Schritte zur Installation und Ausführung der Anwendung.
+
+## Voraussetzungen
+
+Stelle sicher, dass die folgenden Voraussetzungen auf deinem System erfüllt sind:
+
+- Node.js (empfohlen: die neueste LTS-Version)
+- Docker
+
+## Installation
+
+Führe die folgenden Befehle in der angegebenen Reihenfolge aus, um die Anwendung zu installieren und auszuführen:
+
+```bash
+# Installiere pnpm
 npm install -g pnpm@latest-10
-bash
-Kopieren
+
+# Abhängigkeiten installieren
 pnpm install
-bash
-Kopieren
+
+# Browserless Docker-Container starten
 sudo docker run -it -e TOKEN=110e2d21-efc4-44e5-853a-9ce4099c81e1 -e PORT=8848 -p 8848:8848 --name browserless nstbrowser/browserless:130-202411051500.v2
-bash
-Kopieren
+
+# V-Login Docker-Image erstellen
 sudo docker build -t v-login .
-bash
-Kopieren
+
+# V-Login Docker-Container starten
 sudo docker run --rm --network="host" v-login
+```
+
 Mit diesen Schritten sollte deine Anwendung erfolgreich in Docker laufen.
+
+## Lizenz
+
+Dieses Projekt ist unter der MIT-Lizenz lizenziert. Siehe die [LICENSE](LICENSE)-Datei für Details.
+
+## Kontakt
+
+Bei Fragen oder Problemen kannst du dich an den Repository-Besitzer wenden: [and189](https://github.com/and189).
+
+---
+
+Füge diesen Inhalt in eine neue `README.md`-Datei in deinem Repository ein.
