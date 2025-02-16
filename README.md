@@ -2,7 +2,7 @@
 
 ## Architecture & Technology
 
-Our solution is based on **browserless**, a Docker container that provides a fully functional headless browser (Chrome) and can be accessed via a WebSocket endpoint. Instead of launching a new browser for every request, browserless efficiently manages multiple browser sessions so that only the necessary instances are activated "on demand".
+Our solution is based on **browserless**, a Docker container that provides a fully functional headless browser (NSTChrome) and can be accessed via a WebSocket endpoint. Instead of launching a new browser for every request, browserless efficiently manages multiple browser sessions so that only the necessary instances are activated "on demand".
 
 ### How Does Browserless Work?
 
