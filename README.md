@@ -46,6 +46,7 @@ Follow these steps in the given order to install and run the application:
 Install Dependencies
 
 ---bash
+   ```bash
 
 pnpm install
 Start the Browserless Docker Container
@@ -53,14 +54,15 @@ Start the Browserless Docker Container
 
 Replace the TOKEN and PORT values if necessary:
 
-```bash
+   ```bash
 sudo docker run -it -e TOKEN=110e2d21-efc4-44e5-853a-9ce4099c81e1 -e PORT=8848 -p 8848:8848 --name browserless nstbrowser/browserless:130-202411051500.v2
 This container is required to provide Chrome/Puppeteer instances via a WebSocket endpoint.
 ---bash
 
 Build the V-Login Docker Image
 
-```bash
+   ```bash
+
 
 sudo docker build -t v-login .
 Start the V-Login Docker Container
@@ -68,7 +70,7 @@ Start the V-Login Docker Container
 
 This command runs the container in the host network and removes it automatically when it stops:
 
-```bash
+   ```bash
 sudo docker run --rm --network="host" v-login
 ---bash
 
