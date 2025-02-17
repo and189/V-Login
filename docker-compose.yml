@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  browserless:
+    image: nstbrowser/browserless:130-202412251400.v1
+    container_name: browserless
+    environment:
+      - TOKEN=110e2d21-efc4-44e5-853a-9ce4099c81e1
+      - PORT=8848
+    ports:
+      - "8848:8848"
+    restart: unless-stopped
+
+  v-login:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: v-login
+    network_mode: host
+    environment:
+      - PORT=5090
+    volumes:
+      # Mountet die proxys.json aus dem Hauptverzeichnis in den Container (nur lesend)
+      - ./proxys.json:/app/proxys.json:ro
+    restart: unless-stopped
