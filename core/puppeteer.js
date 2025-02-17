@@ -5,14 +5,13 @@ const { bypassPuppeteerDetection } = require('./detection');
 const { v4: uuidv4 } = require('uuid');
 const { IMPERVA_CHECK_TEXT } = require('../config/constants');
 const { performLogin } = require('./login_handler');
-const { getCurrentIp, isIpBanned } = require('../utils/ipUtils'); // neu importieren
+const { isIpBanned } = require('../utils/ipUtils');
 
 async function initBrowser(wsEndpoint) {
   logger.debug(`Connecting to browser via WebSocket endpoint: ${wsEndpoint}`);
   let browser = null;
   try {
     browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
-    // Kurze Wartezeit, um die Verbindung zu stabilisieren
     await new Promise(resolve => setTimeout(resolve, 1000));
     const page = await browser.newPage();
     const viewportWidth = 1200 + Math.floor(Math.random() * 200);
@@ -38,29 +37,32 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
     browser = br;
     page = pg;
 
-    // --- Neuer IP-Check beim Session-Start ---
-    const currentIp = await getCurrentIp();
-    logger.info(`Public IP at session start: ${currentIp}`);
-    if (await isIpBanned(currentIp)) {
-      logger.error(`Public IP ${currentIp} is banned at session start.`);
+    const browserIp = await page.evaluate(async () => {
+      try {
+        const res = await fetch('https://api.ipify.org?format=json');
+        const data = await res.json();
+        return data.ip;
+      } catch (e) {
+        return null;
+      }
+    });
+    logger.info(`Public IP (browser-side): ${browserIp}`);
+    if (browserIp && await isIpBanned(browserIp)) {
+      logger.error(`Browser IP ${browserIp} is banned.`);
       return { error: "IP_BLOCKED" };
     }
-    // -------------------------------------------
 
     logger.debug(`Navigating to ${initialAuthUrl} - Session ID: ${uniqueSessionId}`);
     await page.goto(initialAuthUrl, { waitUntil: 'networkidle2' });
     logger.debug(`Navigation completed to ${page.url()} - Session ID: ${uniqueSessionId}`);
 
-    // Imperva-Check
     const pageSource = await page.content();
     if (pageSource.includes(IMPERVA_CHECK_TEXT)) {
-      logger.error(`IP Bann from Imperva triggered for Session ID: ${uniqueSessionId}`);
+      logger.error(`IP ban triggered by Imperva for Session ID: ${uniqueSessionId}`);
       return { error: "IP_BLOCKED" };
     }
 
-    // Login durchführen
     const loginResult = await performLogin(page, username, password, uniqueSessionId);
-
     if (typeof loginResult === "string") {
       logger.info(`[${uniqueSessionId}] Final code => ${loginResult}`);
       return { token: loginResult };
@@ -92,34 +94,45 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
 async function launchAndConnectToBrowser(initialAuthUrl, username, password, proxyIndicator) {
   const host = 'localhost:8848';
   const config = {
+    name: 'testProfile',
     once: true,
-    headless: true, // Headless-Modus aktivieren
-    autoClose: true,
-    args: { '--disable-gpu': '', '--no-sandbox': '' },
+    platform: 'windows',
+    kernel: 'chromium',
+    kernelMilestone: '130',
+    skipProxyChecking: true,
     fingerprint: {
-      name: '',
-      platform: 'mac',
-      kernel: 'chromium',
-      kernelMilestone: 130,
-      hardwareConcurrency: 8,
-      deviceMemory: 8,
+      flags: {
+        timezone: 'BasedOnIp',
+        screen: 'Custom'
+      },
+      screen: {
+        width: 1000,
+        height: 1000
+      },
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.6613.85 Safari/537.36'
     },
+    args: {
+      '--proxy-bypass-list': 'domain1,domain2',
+      '--load-extension': 'extDir1,extDir2'
+    }
   };
 
-  // Falls ein Proxy genutzt werden soll, wird er hier eingebaut.
   if (proxyIndicator && proxyIndicator.trim().length > 0) {
+    config.proxy = proxyIndicator;
+    logger.debug(`Using provided proxy: ${proxyIndicator}`);
+  } else {
     const { getNextProxy } = require('../utils/proxyPool');
     const selectedProxy = getNextProxy();
     if (selectedProxy) {
-      config.args["--proxy-server"] = selectedProxy;
-      logger.debug(`Using proxy: ${selectedProxy}`);
+      config.proxy = selectedProxy;
+      logger.debug(`Using proxy from proxyPool: ${selectedProxy}`);
     } else {
-      logger.debug("No available proxies; using local IP");
+      logger.debug('No available proxies; using local IP');
     }
   }
 
-  const browserWSEndpoint = `ws://${host}/connect?${encodeURIComponent(JSON.stringify(config))}`;
-  logger.debug(`Browser WS Endpoint: ${browserWSEndpoint}`);
+  const browserWSEndpoint = `ws://${host}/api/agent/devtool/launch?config=${encodeURIComponent(JSON.stringify(config))}`;
+  logger.info(`Browser WS Endpoint: ${browserWSEndpoint}`);
 
   return await runPuppeteer(initialAuthUrl, username, password, browserWSEndpoint);
 }
