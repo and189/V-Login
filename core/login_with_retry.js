@@ -6,17 +6,17 @@ const logger = require('../utils/logger');
 const { launchAndConnectToBrowser } = require('./puppeteer');
 
 /**
- * Wartet darauf, dass sich die öffentliche IP von previousIp ändert.
+ * Waits for the public IP to change from the previousIp.
  *
- * @param {string} previousIp - Die aktuell gesperrte IP.
- * @param {number} checkIntervalMs - Wie oft (in ms) wird die IP überprüft (Standard: 60000 ms).
- * @returns {Promise<string>} - Gibt die neue IP zurück, sobald sich diese ändert.
+ * @param {string} previousIp - The currently banned IP.
+ * @param {number} checkIntervalMs - How often (in ms) to check the IP (default: 60000 ms).
+ * @returns {Promise<string>} - Returns the new IP as soon as it changes.
  */
 async function waitForNewIp(previousIp, checkIntervalMs = 60000) {
   let currentIp = previousIp;
   logger.info(`Local IP banned. Waiting for a new IP (current IP: ${previousIp})...`);
   
-  // Polling-Schleife: Prüfe alle checkIntervalMs, ob sich die IP geändert hat.
+  // Polling loop: Check every checkIntervalMs if the IP has changed.
   while (currentIp === previousIp) {
     await setTimeoutPromise(checkIntervalMs);
     try {
@@ -31,31 +31,30 @@ async function waitForNewIp(previousIp, checkIntervalMs = 60000) {
 }
 
 /**
- * Führt einen Login-Versuch durch. Falls ein lokaler IP-Ban festgestellt wird (error "IP_BLOCKED")
- * und kein Proxy verwendet wird, wird gewartet, bis sich die öffentliche IP ändert, und danach
- * ein erneuter Login-Versuch gestartet.
+ * Attempts to log in. If a local IP ban ("IP_BLOCKED" error) is detected
+ * and no proxy is used, waits for the public IP to change before retrying.
  *
- * @param {string} url - Die Authentifizierungs-URL.
- * @param {string} username - Der Benutzername.
- * @param {string} password - Das Passwort.
- * @param {string} [proxy] - (Optional) Falls gesetzt, wird der IP-Waiting-Mechanismus übersprungen.
- * @returns {Promise<Object>} - Das Ergebnis des Login-Prozesses.
+ * @param {string} url - The authentication URL.
+ * @param {string} username - The username.
+ * @param {string} password - The password.
+ * @param {string} [proxy] - (Optional) If provided, the IP-wait mechanism is skipped.
+ * @returns {Promise<Object>} - The result of the login process.
  */
 async function loginWithRetry(url, username, password, proxy) {
-  // Erster Login-Versuch
+  // First login attempt
   logger.info("Starting first login attempt...");
   let result = await launchAndConnectToBrowser(url, username, password, proxy);
 
-  // Falls kein Proxy genutzt wird und ein IP-Ban (local oder Imperva) erkannt wurde:
+  // If no proxy is used and an IP ban (local or Imperva) is detected:
   if (result.error === "IP_BLOCKED" && (!proxy || proxy.trim() === "")) {
     try {
       logger.warn("Detected IP_BLOCKED error. Initiating wait for new IP...");
       const previousIp = await getCurrentIp();
       logger.info(`Current IP before waiting: ${previousIp}`);
-      // Warte darauf, dass sich die IP ändert.
+      // Wait for the IP to change.
       await waitForNewIp(previousIp);
       
-      // Nach Erhalt einer neuen IP wird ein erneuter Login-Versuch gestartet.
+      // Retry the login attempt after the IP change.
       logger.info("Retrying login after IP change...");
       result = await launchAndConnectToBrowser(url, username, password, proxy);
     } catch (error) {
