@@ -1,10 +1,22 @@
 // utils/proxyPool.js
-const proxyList = [
-  //'http://user:password@proxy1.com:8080',
-  //'http://user:password@proxy2.com:8080',
-  //'http://user:password@proxy3.com:8080',
-  // weitere Proxies ...
-];
+const fs = require('fs');
+const path = require('path');
+const { URL } = require('url');
+
+// Lese die Proxys aus der proxys.json im Hauptverzeichnis ein.
+// Erwartet wird ein JSON-Array, z.B.:
+// [ "http://user:password@proxy1.com:8080", "http://user:password@proxy2.com:8080", ... ]
+let proxyList = [];
+try {
+  const proxiesFilePath = path.join(process.cwd(), 'proxys.json');
+  const fileContent = fs.readFileSync(proxiesFilePath, 'utf8');
+  proxyList = JSON.parse(fileContent);
+  console.log(`Loaded ${proxyList.length} proxies from proxys.json`);
+} catch (err) {
+  console.error("Error reading proxys.json:", err);
+  // Falls ein Fehler auftritt, wird die proxyList leer gelassen.
+  proxyList = [];
+}
 
 // Hier speichern wir, bis wann ein Proxy gesperrt ist.
 const lockedProxies = {};
@@ -62,12 +74,30 @@ function reportProxyFailure(proxy) {
  */
 function reportProxySuccess(proxy) {
   proxyCooldowns[proxy] = DEFAULT_LOCK_DURATION_MS;
-  // Optional: Wenn gewünscht, kann der Proxy auch neu gesperrt werden.
+  // Optional: Falls gewünscht, kann der Proxy auch erneut gesperrt werden.
+}
+
+/**
+ * Extrahiert aus der Proxy-URL den "Proxy-Authorization"-Header.
+ * @param {string} proxyUrl - Die Proxy-URL im Format http://user:password@host:port
+ * @returns {object} - Ein Objekt mit dem Header, z.B. { "Proxy-Authorization": "Basic <credentials>" }.
+ */
+function getProxyAuthHeaders(proxyUrl) {
+  try {
+    const parsed = new URL(proxyUrl);
+    if (parsed.username && parsed.password) {
+      const credentials = Buffer.from(`${parsed.username}:${parsed.password}`).toString('base64');
+      return { 'Proxy-Authorization': `Basic ${credentials}` };
+    }
+  } catch (err) {
+    console.error('Fehler beim Parsen der Proxy-URL:', err);
+  }
+  return {};
 }
 
 module.exports = {
   getNextProxy,
   reportProxyFailure,
   reportProxySuccess,
+  getProxyAuthHeaders
 };
-
