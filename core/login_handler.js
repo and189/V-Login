@@ -139,7 +139,8 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
     logger.error(`[${uniqueSessionId}] Global login error: ${error.message}`);
     return false;
   } finally {
-    page.removeListener('response', responseListener);
+    // Entferne den Response-Listener korrekt mit "page.off"
+    page.off('response', responseListener);
   }
 }
 
