@@ -133,7 +133,7 @@ async function launchAndConnectToBrowser(initialAuthUrl, username, password, pro
     }
   }
 
-  const browserWSEndpoint = `ws://${host}/api/agent/devtool/launch?config=${encodeURIComponent(JSON.stringify(config))}`;
+  const browserWSEndpoint = `ws://${host}/devtool/launch?config=${encodeURIComponent(JSON.stringify(config))}`;
   logger.info(`Browser WS Endpoint: ${browserWSEndpoint}`);
 
   return await runPuppeteer(initialAuthUrl, username, password, browserWSEndpoint);
