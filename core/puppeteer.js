@@ -63,15 +63,17 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
     }
 
     const loginResult = await performLogin(page, username, password, uniqueSessionId);
-    if (typeof loginResult === "string") {
-      logger.info(`[${uniqueSessionId}] Final code => ${loginResult}`);
-      return { token: loginResult };
-    } else if (loginResult === "IP_BLOCKED") {
+    // Zuerst prüfen, ob ein bekannter Fehlercode zurückgegeben wurde…
+    if (loginResult === "IP_BLOCKED") {
       logger.warn(`[${uniqueSessionId}] IP blocked detected during login`);
       return { error: "IP_BLOCKED" };
     } else if (loginResult === "ACCOUNT_BANNED") {
-      logger.warn(`[${uniqueSessionId}] Account banned`);
+      logger.warn(`[${uniqueSessionId}] Account banned detected during login`);
       return { error: "ACCOUNT_BANNED" };
+    } else if (typeof loginResult === "string") {
+      // …nur dann wird der String als gültiger Token interpretiert.
+      logger.info(`[${uniqueSessionId}] Final code => ${loginResult}`);
+      return { token: loginResult };
     } else {
       logger.warn(`[${uniqueSessionId}] Login failed`);
       return { error: "LOGIN_FAILED" };
