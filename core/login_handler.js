@@ -1,114 +1,143 @@
-// api/login.js
-const express = require('express');
-const router = express.Router();
-const { loginWithRetry } = require('../core/login_with_retry'); // Modul mit integriertem IP-Ban-Handling
-const { AuthResponseStatus } = require('../core/auth_response');
+// core/login_handler.js
 const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
-const { URLSearchParams } = require('url');
-const { getNextProxy } = require('../utils/proxyPool');  // Proxy aus dem Pool
+const { setTimeoutPromise } = require('../utils/helpers');
 
-router.post('/', async (req, res) => {
-  const startTime = Date.now();
-  const requestId = uuidv4();
-  logger.info(`Received login request - Request ID: ${requestId}`);
+/**
+ * performLogin:
+ * - Sucht in der URL nach einem "ory_ac_..."-Code.
+ * - Prüft nach dem Login-Klick, ob ein Response mit Status 418 (Account banned) empfangen wird.
+ * - Sobald entweder der Code gefunden wurde oder ein 418-Status erkannt wird, wird der Flow abgebrochen.
+ *
+ * @param {Object} page - Puppeteer Page-Instanz
+ * @param {string} username - Benutzername
+ * @param {string} password - Passwort
+ * @param {string} [uniqueSessionId] - Optional: Eindeutige Session-ID (wird automatisch generiert, falls nicht angegeben)
+ * @returns {Promise<string|false>} - Liefert den gefundenen Code, "ACCOUNT_BANNED" oder false bei Fehlern
+ */
+async function performLogin(page, username, password, uniqueSessionId = uuidv4()) {
+  let foundCode = null;    // Speichert den ory-Code, sobald gefunden
+  let bannedStatus = false; // Wird auf true gesetzt, wenn ein Response mit Status 418 empfangen wird
+
+  // Regex zum Extrahieren des "ory_ac_..."-Codes aus der URL
+  const oryRegex = /ory_ac_[^&#]+/i;
+
+  // Response-Listener: Prüft, ob in Response-URLs der Code vorkommt oder ob ein 418-Status zurückkommt
+  function responseListener(response) {
+    try {
+      if (response.status() === 418) {
+        bannedStatus = true;
+        logger.warn(`[${uniqueSessionId}] Received response with status 418 (Account banned)`);
+      }
+      if (!foundCode) {
+        const url = response.url();
+        const match = oryRegex.exec(url);
+        if (match) {
+          foundCode = match[0];
+          logger.info(`[${uniqueSessionId}] Found ory-code => ${foundCode}`);
+        }
+      }
+    } catch (err) {
+      logger.warn(`[${uniqueSessionId}] Error in response listener: ${err.message}`);
+    }
+  }
+  page.on('response', responseListener);
+
+  // Globaler Timeout (90 Sekunden)
+  let timeoutHandle;
+  const globalTimeout = 90000;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(new Error('Global login timeout reached'));
+    }, globalTimeout);
+  });
+
+  // Haupt-Login-Prozess
+  const loginProcess = (async () => {
+    logger.debug(`[${uniqueSessionId}] Waiting for username field`);
+    await page.waitForSelector('input#email', { timeout: 10000 });
+    await page.focus('input#email');
+    await page.keyboard.type(username);
+
+    logger.debug(`[${uniqueSessionId}] Waiting for password field`);
+    await page.waitForSelector('input#password', { timeout: 10000 });
+    await page.focus('input#password');
+    await page.keyboard.type(password);
+
+    logger.debug(`[${uniqueSessionId}] Waiting 1 second after entering credentials`);
+    await setTimeoutPromise(1000);
+
+    // Falls der Code bereits vor dem Klick gefunden wurde:
+    if (foundCode) {
+      logger.info(`[${uniqueSessionId}] Code found before login click => success`);
+      return foundCode;
+    }
+
+    const loginButtonSelector = "#accept";
+    logger.debug(`[${uniqueSessionId}] Waiting for login button`);
+    await page.waitForSelector(loginButtonSelector, { timeout: 6000, visible: true });
+    logger.debug(`[${uniqueSessionId}] Clicking login button`);
+    await page.click(loginButtonSelector, { delay: 100 });
+
+    // Kurze Wartezeit, damit der Klick verarbeitet wird:
+    await setTimeoutPromise(1000);
+
+    if (bannedStatus) {
+      logger.warn(`[${uniqueSessionId}] Aborting further actions due to 418 status`);
+      return "ACCOUNT_BANNED";
+    }
+
+    if (foundCode) {
+      logger.info(`[${uniqueSessionId}] Code found immediately after login click => success`);
+      return foundCode;
+    }
+
+    let currentUrl = page.url();
+    logger.info(`[${uniqueSessionId}] URL after login click: ${currentUrl}`);
+
+    // Falls eine Consent-Seite erkannt wird, versuche den Allow-Flow:
+    if (currentUrl.includes("consent") && !foundCode && !bannedStatus) {
+      logger.info(`[${uniqueSessionId}] Consent page detected. Processing allow step.`);
+      try {
+        logger.debug(`[${uniqueSessionId}] Waiting for allow button on consent page`);
+        await page.waitForSelector(loginButtonSelector, { timeout: 10000, visible: true });
+        logger.debug(`[${uniqueSessionId}] Clicking allow button on consent page`);
+        await page.click(loginButtonSelector, { delay: 100 });
+        await page.waitForNavigation({ timeout: 30000 });
+      } catch (allowErr) {
+        logger.warn(`[${uniqueSessionId}] Error during consent allow step: ${allowErr.message}`);
+      }
+    }
+
+    await setTimeoutPromise(1000);
+    if (foundCode) {
+      logger.info(`[${uniqueSessionId}] Code found after consent allow => success`);
+      return foundCode;
+    }
+
+    currentUrl = page.url();
+    logger.info(`[${uniqueSessionId}] Final URL: ${currentUrl}`);
+    const finalMatch = oryRegex.exec(currentUrl);
+    if (finalMatch) {
+      logger.info(`[${uniqueSessionId}] Found ory-code in final URL => ${finalMatch[0]}`);
+      return finalMatch[0];
+    }
+
+    logger.warn(`[${uniqueSessionId}] No code found => login failed`);
+    return false;
+  })();
 
   try {
-    const { url, username, password } = req.body;
-    const required = ["url", "username", "password"];
-    if (!required.every(key => req.body[key])) {
-      logger.error(`[Request ID: ${requestId}] Missing required parameters`);
-      return res.status(400).json({
-        status: AuthResponseStatus.ERROR,
-        description: "Missing required parameters"
-      });
-    }
-
-    // 1. Proxy aus dem Pool holen
-    let proxy;
-    try {
-      proxy = getNextProxy();
-      logger.info(`[Request ID: ${requestId}] Using proxy: ${proxy}`);
-    } catch (error) {
-      logger.error(`[Request ID: ${requestId}] No available proxy!`);
-      return res.status(503).json({
-        status: AuthResponseStatus.ERROR,
-        description: "No proxy available at the moment."
-      });
-    }
-
-    // 2. (Optional) Konfigurationsparameter als Query-String anhängen.
-    const config = {
-      proxy,             // Proxy aus dem Pool
-      platform: 'mac',   // Beispiel: "windows", "mac", "linux"
-      kernel: 'chromium' // Beispiel: "chromium"
-    };
-    const query = new URLSearchParams({ config: JSON.stringify(config) });
-    logger.info(`[Request ID: ${requestId}] Config: ${JSON.stringify(config)}`);
-
-    // 3. Login-Versuch starten mit integriertem IP-Ban-Handling
-    logger.info(`[Request ID: ${requestId}] Starting first login attempt...`);
-    const result = await loginWithRetry(url, username, password, proxy);
-
-    logger.info(
-      `[Request ID: ${requestId}] Request processed in ${(Date.now() - startTime) / 1000}s`
-    );
-
-    // Fehlerbehandlung
-    if (result.error) {
-      if (result.error === "IP_BLOCKED") {
-        logger.warn(`[Request ID: ${requestId}] IP blocked => waiting 60s => no response`);
-        await new Promise(resolve => setTimeout(resolve, 60000));
-        logger.warn(`[Request ID: ${requestId}] 60s over => returning silently`);
-        return;
-      }
-      if (["ACCOUNT_BANNED", "IMPERVA_BLOCKED"].includes(result.error)) {
-        logger.warn(`[Request ID: ${requestId}] BANNED => 418`);
-        return res.status(418).json({
-          status: AuthResponseStatus.BANNED,
-          description: "Account is banned or Imperva blocked"
-        });
-      }
-      if (result.error === "LOGIN_FAILED") {
-        logger.warn(`[Request ID: ${requestId}] Invalid credentials => 400`);
-        return res.status(400).json({
-          status: AuthResponseStatus.INVALID,
-          description: "Invalid credentials or login error"
-        });
-      }
-      logger.error(`[Request ID: ${requestId}] Unhandled error => 500 => ${result.error}`);
-      return res.status(500).json({
-        status: AuthResponseStatus.ERROR,
-        description: result.description || "Internal server error"
-      });
-    }
-
-    // Erfolgsbehandlung: Es wird zuerst geprüft, ob der Token NICHT eines der Fehler-Codes ist
-    if (
-      typeof result.token === "string" &&
-      !["ACCOUNT_BANNED", "IP_BLOCKED"].includes(result.token)
-    ) {
-      logger.info(`[Request ID: ${requestId}] SUCCESS => 200, login_code: ${result.token}`);
-      return res.status(200).json({
-        status: AuthResponseStatus.SUCCESS,
-        login_code: result.token,
-        usedProxy: result.usedProxy || null
-      });
-    }
-
-    // Falls kein Token gefunden wurde (unerwarteter Fall)
-    logger.error(`[Request ID: ${requestId}] No error, no token => unexpected => 500`);
-    return res.status(500).json({
-      status: AuthResponseStatus.ERROR,
-      description: "No token found unexpectedly"
-    });
+    const result = await Promise.race([loginProcess, timeoutPromise]);
+    clearTimeout(timeoutHandle);
+    return result;
   } catch (error) {
-    logger.error(`[Request ID: ${requestId}] API error: ${error}`);
-    return res.status(500).json({
-      status: AuthResponseStatus.ERROR,
-      description: "Internal server error"
-    });
+    logger.error(`[${uniqueSessionId}] Global login error: ${error.message}`);
+    return false;
+  } finally {
+    // Entferne den Response-Listener, um Speicherlecks zu vermeiden
+    page.off('response', responseListener);
   }
-});
+}
 
-module.exports = router;
+module.exports = { performLogin };
