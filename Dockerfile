@@ -35,4 +35,3 @@ EXPOSE 5090
 
 # Standard-Startbefehl: Passe den Eintragspunkt ggf. an (z.B. "app.js" statt "index.mjs")
 CMD ["node", "app.js"]
-
