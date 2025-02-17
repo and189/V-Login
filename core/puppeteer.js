@@ -100,6 +100,8 @@ async function launchAndConnectToBrowser(initialAuthUrl, username, password, pro
     kernel: 'chromium',
     kernelMilestone: '130',
     skipProxyChecking: true,
+    autoClose: true,
+    clearCacheOnClose: true,
     fingerprint: {
       flags: {
         timezone: 'BasedOnIp',
