@@ -50,7 +50,7 @@ Follow these steps in the given order to install and run the application:
     ```bash
     pnpm install
     ```
-  set proxys in proxys.json
+    set proxys in proxys.json
 
 3  **Build**
 
