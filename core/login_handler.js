@@ -6,30 +6,38 @@ const { setTimeoutPromise } = require('../utils/helpers');
 /**
  * Login-Ablauf:
  * - Wir suchen nach "ory_ac_..."-Code via Regex (aus dem URL-String).
- * - Sobald der Code gefunden ist, brechen wir den Flow ab (erfolgreich).
- * - Falls wir noch keinen Code haben, warten wir ggf. auf Navigation oder Consent-Schritte.
+ * - Außerdem prüfen wir direkt nach dem Login-Klick, ob ein Response den Status 418 zurückliefert.
+ * - Sobald der Code gefunden ist oder ein 418-Status empfangen wurde, brechen wir den Flow ab.
  */
 async function performLogin(page, username, password, uniqueSessionId = uuidv4()) {
-  let foundCode = null; // Speichert den ory-Code, sobald gefunden
-  let loginAttemptStarted = false; // Ob wir bereits den Login-Button geklickt haben
+  let foundCode = null;   // Speichert den ory-Code, sobald gefunden
+  let bannedStatus = false; // Wird true, wenn ein Response mit Status 418 kommt
 
   // Regex zum Extrahieren des "ory_ac_..." aus beliebiger Stelle der URL
   const oryRegex = /ory_ac_[^&#]+/i;
 
-  // Response-Listener: Bei jeder Response prüfen wir, ob in der URL der ory-Code auftaucht
-  page.on('response', async (response) => {
+  // Response-Listener: Prüft sowohl auf den ory-Code als auch auf Status 418
+  function responseListener(response) {
     try {
-      if (foundCode) return;
-      const url = response.url();
-      const match = oryRegex.exec(url);
-      if (match) {
-        foundCode = match[0];
-        logger.info(`[${uniqueSessionId}] Found ory-code => ${foundCode}`);
+      // Statuscode prüfen: Wenn 418, dann Konto gesperrt
+      if (response.status() === 418) {
+        bannedStatus = true;
+        logger.warn(`[${uniqueSessionId}] Received response with status 418 (Account banned)`);
+      }
+      // Prüfen, ob die URL den ory-Code enthält
+      if (!foundCode) {
+        const url = response.url();
+        const match = oryRegex.exec(url);
+        if (match) {
+          foundCode = match[0];
+          logger.info(`[${uniqueSessionId}] Found ory-code => ${foundCode}`);
+        }
       }
     } catch (err) {
       logger.warn(`[${uniqueSessionId}] Error in response listener: ${err.message}`);
     }
-  });
+  }
+  page.on('response', responseListener);
 
   // Globaler Timeout (90s)
   let timeoutHandle;
@@ -68,11 +76,18 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
     logger.debug(`[${uniqueSessionId}] Waiting for login button`);
     await page.waitForSelector(loginButtonSelector, { timeout: 6000, visible: true });
     logger.debug(`[${uniqueSessionId}] Clicking login button`);
-    loginAttemptStarted = true;
     await page.click(loginButtonSelector, { delay: 100 });
 
     // Warten, damit der Klick verarbeitet wird, und direkt prüfen:
     await setTimeoutPromise(1000);
+
+    // Falls ein 418-Status empfangen wurde, abbrechen
+    if (bannedStatus) {
+      logger.warn(`[${uniqueSessionId}] Aborting further actions due to 418 status`);
+      return "ACCOUNT_BANNED";
+    }
+
+    // Direkt nach Login: Code prüfen
     if (foundCode) {
       logger.info(`[${uniqueSessionId}] Code found immediately after login click => success`);
       return foundCode;
@@ -82,12 +97,11 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
     logger.info(`[${uniqueSessionId}] URL after login click: ${currentUrl}`);
 
     // Falls Consent benötigt wird (z.B. URL enthält "consent")
-    if (currentUrl.includes("consent") && !foundCode) {
+    if (currentUrl.includes("consent") && !foundCode && !bannedStatus) {
       logger.info(`[${uniqueSessionId}] Consent page detected. Processing allow step.`);
       try {
         logger.debug(`[${uniqueSessionId}] Waiting for allow button on consent page`);
         await page.waitForSelector(loginButtonSelector, { timeout: 10000, visible: true });
-        // Nur ein einmaliger Klick auf "Allow"
         logger.debug(`[${uniqueSessionId}] Clicking allow button on consent page`);
         await page.click(loginButtonSelector, { delay: 100 });
         // Warten auf Navigation
@@ -125,7 +139,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
     logger.error(`[${uniqueSessionId}] Global login error: ${error.message}`);
     return false;
   } finally {
-    page.removeAllListeners('response');
+    page.removeListener('response', responseListener);
   }
 }
 
