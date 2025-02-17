@@ -53,6 +53,7 @@ Follow these steps in the given order to install and run the application:
   set proxys in proxys.json
 
 3  **Build**
+
     ```bash
     sudo docker compose build 
     ```
