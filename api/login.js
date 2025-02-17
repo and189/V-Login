@@ -1,30 +1,17 @@
 // api/login.js
 const express = require('express');
 const router = express.Router();
-const { loginWithRetry } = require('../core/login_with_retry'); // Neues Modul, das IP-Ban-Handling integriert
+const { loginWithRetry } = require('../core/login_with_retry'); // New module with integrated IP-ban handling
 const { AuthResponseStatus } = require('../core/auth_response');
 const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
 const { URLSearchParams } = require('url');
-const { getNextProxy } = require('../utils/proxyPool');  // Proxy aus dem Pool
-
-let isProcessing = false;
+const { getNextProxy } = require('../utils/proxyPool');  // Proxy from pool
 
 router.post('/', async (req, res) => {
   const startTime = Date.now();
   const requestId = uuidv4();
   logger.info(`Received login request - Request ID: ${requestId}`);
-
-  if (isProcessing) {
-    logger.warn(`[Request ID: ${requestId}] Request rejected - Server is currently processing another request.`);
-    return res.status(429).json({
-      status: AuthResponseStatus.ERROR,
-      description: "Server is busy. Please try again later."
-    });
-  }
-
-  isProcessing = true;
-  logger.debug(`[Request ID: ${requestId}] Set isProcessing = true`);
 
   try {
     const { url, username, password } = req.body;
@@ -37,10 +24,10 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // 1. Hole den nächsten Proxy aus dem Pool
+    // 1. Get the next proxy from the pool
     let proxy;
     try {
-      proxy = getNextProxy(); 
+      proxy = getNextProxy();
       logger.info(`[Request ID: ${requestId}] Using proxy: ${proxy}`);
     } catch (error) {
       logger.error(`[Request ID: ${requestId}] No available proxy!`);
@@ -50,25 +37,24 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // 2. (Optional) Wenn du zusätzlich noch Konfigurationsparameter als Query-String anhängen möchtest,
-    //    könntest du hier z. B. auch platform- und kernel-Informationen in einem config-Objekt verpacken.
+    // 2. (Optional) Attach configuration parameters as a query string.
+    // You could, for example, pack platform and kernel information into a config object.
     const config = {
-      proxy,             // Proxy aus dem Pool
-      platform: 'mac',   // Beispiel: "windows", "mac", "linux"
-      kernel: 'chromium' // Beispiel: "chromium"
+      proxy,             // Proxy from the pool
+      platform: 'mac',   // Example: "windows", "mac", "linux"
+      kernel: 'chromium' // Example: "chromium"
     };
     const query = new URLSearchParams({ config: JSON.stringify(config) });
-    // Falls du den WS-Endpoint zusätzlich mit Query-Parametern versehen möchtest, kannst du das auch tun:
-    // (Hinweis: loginWithRetry/launchAndConnectToBrowser baut intern den WS-Endpoint; dieser Schritt ist optional)
+    // (Optional) You can append this query string to the WS endpoint if needed.
     logger.info(`[Request ID: ${requestId}] Config: ${JSON.stringify(config)}`);
 
-    // 3. Starte den Login-Versuch über den IP-Ban-Handling-Workflow
+    // 3. Start the login attempt using the IP-ban handling workflow
     logger.info(`[Request ID: ${requestId}] Starting first login attempt...`);
     const result = await loginWithRetry(url, username, password, proxy);
 
     logger.info(`[Request ID: ${requestId}] Request processed in ${(Date.now() - startTime) / 1000}s`);
 
-    // Fehlerbehandlung
+    // Error handling
     if (result.error) {
       if (result.error === "IP_BLOCKED") {
         logger.warn(`[Request ID: ${requestId}] IP blocked => waiting 60s => no response`);
@@ -97,7 +83,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Erfolg
+    // Success
     if (result.token) {
       logger.info(`[Request ID: ${requestId}] SUCCESS => 200, login_code: ${result.token}`);
       return res.status(200).json({
@@ -119,9 +105,6 @@ router.post('/', async (req, res) => {
       status: AuthResponseStatus.ERROR,
       description: "Internal server error"
     });
-  } finally {
-    isProcessing = false;
-    logger.debug(`[Request ID: ${requestId}] Set isProcessing = false`);
   }
 });
 
