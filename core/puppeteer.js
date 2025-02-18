@@ -208,7 +208,7 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
  *   5. Logs the WebSocket endpoint and calls runPuppeteer to start the session.
  */
 async function launchAndConnectToBrowser(initialAuthUrl, username, password, proxyIndicator) {
-  const host = 'localhost:8848';
+  const host = 'browserless:8848';
   const config = {
     name: 'V-Login',
     once: true,
