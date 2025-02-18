@@ -100,6 +100,7 @@ async function launchAndConnectToBrowser(initialAuthUrl, username, password, pro
     once: true,
     platform: 'windows',
     kernel: 'chromium',
+    incognito: true,
     kernelMilestone: '130',
     skipProxyChecking: true,
     autoClose: true,
@@ -117,7 +118,6 @@ async function launchAndConnectToBrowser(initialAuthUrl, username, password, pro
     },
     args: {
       '--proxy-bypass-list': 'domain1,domain2',
-      '--load-extension': 'extDir1,extDir2'
     }
   };
 
