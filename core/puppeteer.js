@@ -214,7 +214,7 @@ async function launchAndConnectToBrowser(initialAuthUrl, username, password, pro
     once: true,
     platform: 'windows',
     kernel: 'chromium',
-    timedCloseSec: '60',
+    timedCloseSec: 60,
     kernelMilestone: '130',
     skipProxyChecking: true,
     autoClose: true,
