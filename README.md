@@ -35,6 +35,7 @@ Ensure the following prerequisites are met on your system:
 -   Node.js (recommended: the latest LTS version)
 -   Docker
 
+
 ## Installation
 
 Follow these steps in the given order to install and run the application:
@@ -50,7 +51,7 @@ Follow these steps in the given order to install and run the application:
     ```bash
     pnpm install
     ```
-    set proxys in proxys.json
+    set proxys in proxys.json or emtpy json
 
 3  **Build**
 
