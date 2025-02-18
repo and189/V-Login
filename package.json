@@ -2,7 +2,7 @@
         "dependencies": {
                 "base-64": "^1.0.0",
                 "body-parser": "^1.20.3",
-                "chalk": "^5.4.1",
+                "chalk": "^4.1.2",
                 "dotenv": "^16.4.7",
                 "express": "^4.21.2",
                 "puppeteer-core": "^24.2.1",
