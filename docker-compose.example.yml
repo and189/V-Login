@@ -16,10 +16,10 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: v-login
-    network_mode: host
     environment:
       - PORT=5090
+    ports:
+      - "5090:5090"
     volumes:
-      # Mountet die proxys.json aus dem Hauptverzeichnis in den Container (nur lesend)
       - ./proxys.json:/app/proxys.json:ro
     restart: unless-stopped
