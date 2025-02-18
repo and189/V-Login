@@ -120,4 +120,9 @@ router.post('/', async (req, res) => {
       description: "Internal server error"
     });
   } finally {
-    // 6. Decrease the activ
+    // 6. Decrease the active requests counter so new requests can be accepted
+    activeRequests--;
+  }
+});
+
+module.exports = router;
