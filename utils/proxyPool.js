@@ -3,36 +3,41 @@ const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 
-// Lese die Proxys aus der proxys.json im Hauptverzeichnis ein.
-// Erwartet wird ein JSON-Array, z.B.:
-// [ "http://user:password@proxy1.com:8080", "http://user:password@proxy2.com:8080", ... ]
+// Read proxies from proxies.txt in the root directory.
+// Expected format: one proxy per line, e.g.:
+// http://user:password@proxy1.com:8080
+// http://user:password@proxy2.com:8080
 let proxyList = [];
 try {
-  const proxiesFilePath = path.join(process.cwd(), 'proxys.json');
+  const proxiesFilePath = path.join(process.cwd(), 'proxies.txt');
   const fileContent = fs.readFileSync(proxiesFilePath, 'utf8');
-  proxyList = JSON.parse(fileContent);
-  console.log(`Loaded ${proxyList.length} proxies from proxys.json`);
+  // Split the file into lines, remove empty lines, and trim each entry.
+  proxyList = fileContent
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+  console.log(`Loaded ${proxyList.length} proxies from proxies.txt`);
 } catch (err) {
-  console.error("Error reading proxys.json:", err);
-  // Falls ein Fehler auftritt, wird die proxyList leer gelassen.
+  console.error("Error reading proxies.txt:", err);
+  // If an error occurs, the proxyList remains empty.
   proxyList = [];
 }
 
-// Hier speichern wir, bis wann ein Proxy gesperrt ist.
+// Object to store until when a proxy is locked.
 const lockedProxies = {};
 
-// Hier merken wir uns den aktuellen Cooldown pro Proxy.
+// Object to store the current cooldown for each proxy.
 const proxyCooldowns = {};
 
-// Standard-Cooldown: 10 Minuten
+// Default cooldown: 10 minutes
 const DEFAULT_LOCK_DURATION_MS = 10 * 60 * 1000;
 
-// Maximale Sperrzeit: 12 Stunden
+// Maximum lock duration: 12 hours
 const MAX_LOCK_DURATION_MS = 12 * 60 * 60 * 1000;
 
 /**
- * Liefert den nächsten verfügbaren Proxy und sperrt ihn für seinen aktuellen Cooldown.
- * Falls alle gesperrt sind oder keine Proxies konfiguriert sind, wird null zurückgegeben.
+ * Returns the next available proxy and locks it for its current cooldown.
+ * If all proxies are locked or none are configured, returns null.
  */
 function getNextProxy() {
   if (proxyList.length === 0) {
@@ -44,19 +49,19 @@ function getNextProxy() {
   for (const proxy of proxyList) {
     const lockedUntil = lockedProxies[proxy];
     if (!lockedUntil || lockedUntil < now) {
-      // Verwende den aktuell gespeicherten Cooldown oder den Standardwert.
+      // Use the currently stored cooldown or the default value.
       const cooldown = proxyCooldowns[proxy] || DEFAULT_LOCK_DURATION_MS;
       lockedProxies[proxy] = now + cooldown;
       return proxy;
     }
   }
   
-  // Falls alle Proxies gesperrt sind, wird null zurückgegeben (lokale IP verwenden)
+  // If all proxies are locked, return null (local IP will be used)
   return null;
 }
 
 /**
- * Meldet einen Proxy-Fehler (IP-Ban) und verdoppelt seinen Cooldown (bis MAX_LOCK_DURATION_MS).
+ * Reports a proxy failure (IP ban) and doubles its cooldown (up to MAX_LOCK_DURATION_MS).
  */
 function reportProxyFailure(proxy) {
   const now = Date.now();
@@ -70,17 +75,17 @@ function reportProxyFailure(proxy) {
 }
 
 /**
- * Meldet einen erfolgreichen Einsatz des Proxys und setzt seinen Cooldown zurück.
+ * Reports a successful use of the proxy and resets its cooldown.
  */
 function reportProxySuccess(proxy) {
   proxyCooldowns[proxy] = DEFAULT_LOCK_DURATION_MS;
-  // Optional: Falls gewünscht, kann der Proxy auch erneut gesperrt werden.
+  // Optional: If desired, the proxy can be locked again.
 }
 
 /**
- * Extrahiert aus der Proxy-URL den "Proxy-Authorization"-Header.
- * @param {string} proxyUrl - Die Proxy-URL im Format http://user:password@host:port
- * @returns {object} - Ein Objekt mit dem Header, z.B. { "Proxy-Authorization": "Basic <credentials>" }.
+ * Extracts the "Proxy-Authorization" header from the proxy URL.
+ * @param {string} proxyUrl - The proxy URL in the format http://user:password@host:port
+ * @returns {object} - An object with the header, e.g. { "Proxy-Authorization": "Basic <credentials>" }.
  */
 function getProxyAuthHeaders(proxyUrl) {
   try {
@@ -90,7 +95,7 @@ function getProxyAuthHeaders(proxyUrl) {
       return { 'Proxy-Authorization': `Basic ${credentials}` };
     }
   } catch (err) {
-    console.error('Fehler beim Parsen der Proxy-URL:', err);
+    console.error('Error parsing proxy URL:', err);
   }
   return {};
 }
