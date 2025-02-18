@@ -8,22 +8,22 @@ const { v4: uuidv4 } = require('uuid');
 const { URLSearchParams } = require('url');
 const { getNextProxy } = require('../utils/proxyPool');
 
-// --- NEW: Global variable to track the number of active requests
-let activeRequests = 0;
-const MAX_CONCURRENT_REQUESTS = 5;
+// --- NEU: Globale Variable, um zu tracken, ob eine Anfrage läuft
+let isBusy = false;
 
 router.post('/', async (req, res) => {
-  // 1. Check if the maximum number of concurrent requests has been reached.
-  if (activeRequests >= MAX_CONCURRENT_REQUESTS) {
-    logger.warn('Maximum concurrent login requests reached, rejecting new request.');
+  // 1. Prüfen, ob bereits eine Anfrage läuft
+  if (isBusy) {
+    // Anfrage wird abgelehnt (z. B. 503 - Service Unavailable)
+    logger.warn('Another login request is already in progress, rejecting new request.');
     return res.status(503).json({
       status: AuthResponseStatus.ERROR,
-      description: "Server is busy, maximum concurrent login requests reached."
+      description: "Server is busy, only one login request at a time."
     });
   }
 
-  // 2. Increase the active requests counter
-  activeRequests++;
+  // 2. Markieren, dass jetzt eine Anfrage bearbeitet wird
+  isBusy = true;
 
   const startTime = Date.now();
   const requestId = uuidv4();
@@ -40,7 +40,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // 3. Retrieve a proxy from the pool
+    // 1. Proxy aus dem Pool holen
     let proxy;
     try {
       proxy = getNextProxy();
@@ -53,7 +53,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // 4. (Optional) Set configuration parameters as a query string
+    // 2. (Optional) Konfigurationsparameter als Query-String
     const config = {
       proxy,
       platform: 'mac',
@@ -62,13 +62,13 @@ router.post('/', async (req, res) => {
     const query = new URLSearchParams({ config: JSON.stringify(config) });
     logger.info(`[Request ID: ${requestId}] Config: ${JSON.stringify(config)}`);
 
-    // 5. Start the login attempt
+    // 3. Login-Versuch starten
     logger.info(`[Request ID: ${requestId}] Starting first login attempt...`);
     const result = await loginWithRetry(url, username, password, proxy);
 
     logger.info(`[Request ID: ${requestId}] Request processed in ${(Date.now() - startTime) / 1000}s`);
 
-    // Error handling
+    // Fehlerbehandlung
     if (result.error) {
       if (result.error === "IP_BLOCKED") {
         logger.warn(`[Request ID: ${requestId}] IP blocked => waiting 60s => no response`);
@@ -97,7 +97,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Success handling
+    // Erfolg
     if (result.token) {
       logger.info(`[Request ID: ${requestId}] SUCCESS => 200, login_code: ${result.token}`);
       return res.status(200).json({
@@ -120,8 +120,8 @@ router.post('/', async (req, res) => {
       description: "Internal server error"
     });
   } finally {
-    // 6. Decrease the active requests counter so new requests can be accepted
-    activeRequests--;
+    // 3. Freigeben, damit die nächste Anfrage bearbeitet werden kann
+    isBusy = false;
   }
 });
 
