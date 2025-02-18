@@ -83,14 +83,57 @@ function reportProxySuccess(proxy) {
 }
 
 /**
+ * Fixes a proxy URL by encoding the credentials (username and password),
+ * so that special characters (like "@") do not break URL parsing.
+ * @param {string} proxyUrl - The original proxy URL.
+ * @returns {string} - The fixed proxy URL with encoded credentials.
+ */
+function fixProxyUrl(proxyUrl) {
+  const protocolSeparator = '://';
+  const protocolEnd = proxyUrl.indexOf(protocolSeparator);
+  if (protocolEnd === -1) {
+    // No protocol found; return original URL.
+    return proxyUrl;
+  }
+  
+  const protocol = proxyUrl.slice(0, protocolEnd + protocolSeparator.length);
+  const remainder = proxyUrl.slice(protocolEnd + protocolSeparator.length);
+  
+  // If there's no '@', then there's no credentials to fix.
+  const atIndex = remainder.lastIndexOf('@');
+  if (atIndex === -1) {
+    return proxyUrl;
+  }
+  
+  const credentials = remainder.slice(0, atIndex);
+  const hostPart = remainder.slice(atIndex + 1);
+  
+  // Split credentials into username and password.
+  const colonIndex = credentials.indexOf(':');
+  if (colonIndex === -1) {
+    // Only username provided.
+    const encodedUsername = encodeURIComponent(credentials);
+    return protocol + encodedUsername + '@' + hostPart;
+  } else {
+    const username = credentials.slice(0, colonIndex);
+    const password = credentials.slice(colonIndex + 1);
+    const encodedUsername = encodeURIComponent(username);
+    const encodedPassword = encodeURIComponent(password);
+    return protocol + encodedUsername + ':' + encodedPassword + '@' + hostPart;
+  }
+}
+
+/**
  * Extracts the "Proxy-Authorization" header from the proxy URL.
  * @param {string} proxyUrl - The proxy URL in the format http://user:password@host:port
  * @returns {object} - An object with the header, e.g. { "Proxy-Authorization": "Basic <credentials>" }.
  */
 function getProxyAuthHeaders(proxyUrl) {
   try {
-    const parsed = new URL(proxyUrl);
-    if (parsed.username && parsed.password) {
+    // Fix the URL to ensure credentials are encoded.
+    const fixedUrl = fixProxyUrl(proxyUrl);
+    const parsed = new URL(fixedUrl);
+    if (parsed.username || parsed.password) {
       const credentials = Buffer.from(`${parsed.username}:${parsed.password}`).toString('base64');
       return { 'Proxy-Authorization': `Basic ${credentials}` };
     }
