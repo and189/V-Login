@@ -102,7 +102,9 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
       return foundCode;
     }
 
-    logger.info(`[${uniqueSessionId}] Navigated to the login page`); 
+    let currentUrl = page.url(); // This line is crucial!
+
+    logger.info(`[${uniqueSessionId}] Navigated to the login page`);
 
     // If a consent page is detected and no code or banned status is set, attempt the allow flow.
     if (currentUrl.includes("consent") &&!foundCode &&!bannedStatus) {
@@ -127,7 +129,8 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
       return foundCode;
     }
 
-    logger.info(`[${uniqueSessionId}] Navigation after login completed`); 
+    currentUrl = page.url();
+    logger.info(`[${uniqueSessionId}] Navigation after login completed`);
 
     // Attempt to extract the ory-code from the final URL.
     const finalMatch = oryRegex.exec(currentUrl);
