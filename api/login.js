@@ -8,13 +8,13 @@ const { v4: uuidv4 } = require('uuid');
 const { URLSearchParams } = require('url');
 const { getNextProxy } = require('../utils/proxyPool');
 
-// --- NEU: Globale Variable, um zu tracken, ob eine Anfrage läuft
+// --- NEW: Global variable to track if a request is already in progress
 let isBusy = false;
 
 router.post('/', async (req, res) => {
-  // 1. Prüfen, ob bereits eine Anfrage läuft
+  // 1. Check if a request is already in progress
   if (isBusy) {
-    // Anfrage wird abgelehnt (z. B. 503 - Service Unavailable)
+    // Reject the request (e.g., 503 - Service Unavailable)
     logger.warn('Another login request is already in progress, rejecting new request.');
     return res.status(503).json({
       status: AuthResponseStatus.ERROR,
@@ -22,15 +22,25 @@ router.post('/', async (req, res) => {
     });
   }
 
-  // 2. Markieren, dass jetzt eine Anfrage bearbeitet wird
+  // 2. Mark that a request is now being processed
   isBusy = true;
 
   const startTime = Date.now();
   const requestId = uuidv4();
+  let proxy; // declared here so it is accessible in the finish listener
+
   logger.info(`Received login request - Request ID: ${requestId}`);
 
   try {
     const { url, username, password } = req.body;
+
+    // Attach a finish event listener to log final details (including actual HTTP status code)
+    res.on('finish', () => {
+      // Extract dragoName from the User-Agent header (e.g., "Dragonite/1.13.3-testing (Level) Git/04e1203)")
+      const dragoName = req.headers['user-agent'] || 'unknown';
+      logger.info(`Request processed in ${(Date.now() - startTime) / 1000}s for ${username || 'unknown'} using ${proxy || 'none'} result ${res.statusCode}. Request by ${dragoName}`);
+    });
+
     const required = ["url", "username", "password"];
     if (!required.every(key => req.body[key])) {
       logger.error(`[Request ID: ${requestId}] Missing required parameters`);
@@ -40,8 +50,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // 1. Proxy aus dem Pool holen
-    let proxy;
+    // 1. Retrieve a proxy from the pool
     try {
       proxy = getNextProxy();
       logger.info(`[Request ID: ${requestId}] Using proxy: ${proxy}`);
@@ -53,7 +62,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // 2. (Optional) Konfigurationsparameter als Query-String
+    // 2. (Optional) Configuration parameters as query string
     const config = {
       proxy,
       platform: 'mac',
@@ -62,13 +71,11 @@ router.post('/', async (req, res) => {
     const query = new URLSearchParams({ config: JSON.stringify(config) });
     logger.info(`[Request ID: ${requestId}] Config: ${JSON.stringify(config)}`);
 
-    // 3. Login-Versuch starten
+    // 3. Start login attempt
     logger.info(`[Request ID: ${requestId}] Starting first login attempt...`);
     const result = await loginWithRetry(url, username, password, proxy);
 
-    logger.info(`[Request ID: ${requestId}] Request processed in ${(Date.now() - startTime) / 1000}s`);
-
-    // Fehlerbehandlung
+    // Error handling
     if (result.error) {
       if (result.error === "IP_BLOCKED") {
         logger.warn(`[Request ID: ${requestId}] IP blocked => waiting 60s => no response`);
@@ -97,7 +104,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Erfolg
+    // Success
     if (result.token) {
       logger.info(`[Request ID: ${requestId}] SUCCESS => 200, login_code: ${result.token}`);
       return res.status(200).json({
@@ -120,7 +127,7 @@ router.post('/', async (req, res) => {
       description: "Internal server error"
     });
   } finally {
-    // 3. Freigeben, damit die nächste Anfrage bearbeitet werden kann
+    // 3. Release the busy flag so the next request can be processed
     isBusy = false;
   }
 });
