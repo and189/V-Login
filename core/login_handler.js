@@ -5,24 +5,24 @@ const { setTimeoutPromise } = require('../utils/helpers');
 
 /**
  * performLogin:
- * - Sucht in der URL nach einem "ory_ac_..."-Code.
- * - Prüft nach dem Login-Klick, ob ein Response mit Status 418 (Account banned) empfangen wird.
- * - Sobald entweder der Code gefunden wurde oder ein 418-Status erkannt wird, wird der Flow abgebrochen.
+ * - Searches the URL for an "ory_ac_..." code.
+ * - After clicking the login button, checks if a response with status 418 (Account banned) is received.
+ * - As soon as either the code is found or a 418 status is detected, the flow is aborted.
  *
- * @param {Object} page - Puppeteer Page-Instanz
- * @param {string} username - Benutzername
- * @param {string} password - Passwort
- * @param {string} [uniqueSessionId] - Optional: Eindeutige Session-ID (wird automatisch generiert, falls nicht angegeben)
- * @returns {Promise<string|false>} - Liefert den gefundenen Code, "ACCOUNT_BANNED" oder false bei Fehlern
+ * @param {Object} page - Puppeteer Page instance.
+ * @param {string} username - Username.
+ * @param {string} password - Password.
+ * @param {string} [uniqueSessionId] - Optional: Unique session ID (automatically generated if not provided).
+ * @returns {Promise<string|false>} - Returns the found code, "ACCOUNT_BANNED", or false on errors.
  */
 async function performLogin(page, username, password, uniqueSessionId = uuidv4()) {
-  let foundCode = null;    // Speichert den ory-Code, sobald gefunden
-  let bannedStatus = false; // Wird auf true gesetzt, wenn ein Response mit Status 418 empfangen wird
+  let foundCode = null;    // Stores the ory-code once it is found.
+  let bannedStatus = false; // Set to true if a response with status 418 is received.
 
-  // Regex zum Extrahieren des "ory_ac_..."-Codes aus der URL
+  // Regular expression to extract the "ory_ac_..." code from a URL.
   const oryRegex = /ory_ac_[^&#]+/i;
 
-  // Response-Listener: Prüft, ob in Response-URLs der Code vorkommt oder ob ein 418-Status zurückkommt
+  // Response listener: Checks if the response contains the code or if a response with status 418 is returned.
   function responseListener(response) {
     try {
       if (response.status() === 418) {
@@ -41,9 +41,10 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
       logger.warn(`[${uniqueSessionId}] Error in response listener: ${err.message}`);
     }
   }
+  // Attach the response listener to the page.
   page.on('response', responseListener);
 
-  // Globaler Timeout (90 Sekunden)
+  // Global timeout setup (90 seconds).
   let timeoutHandle;
   const globalTimeout = 90000;
   const timeoutPromise = new Promise((_, reject) => {
@@ -52,22 +53,27 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
     }, globalTimeout);
   });
 
-  // Haupt-Login-Prozess
+  // Main login process.
   const loginProcess = (async () => {
     logger.debug(`[${uniqueSessionId}] Waiting for username field`);
+    // Wait for the username input field to appear.
     await page.waitForSelector('input#email', { timeout: 10000 });
     await page.focus('input#email');
+    // Type in the username.
     await page.keyboard.type(username);
 
     logger.debug(`[${uniqueSessionId}] Waiting for password field`);
+    // Wait for the password input field to appear.
     await page.waitForSelector('input#password', { timeout: 10000 });
     await page.focus('input#password');
+    // Type in the password.
     await page.keyboard.type(password);
 
     logger.debug(`[${uniqueSessionId}] Waiting 1 second after entering credentials`);
+    // Wait briefly to ensure that the credentials are fully entered.
     await setTimeoutPromise(1000);
 
-    // Falls der Code bereits vor dem Klick gefunden wurde:
+    // If the code was found before clicking the login button, return it immediately.
     if (foundCode) {
       logger.info(`[${uniqueSessionId}] Code found before login click => success`);
       return foundCode;
@@ -75,18 +81,22 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
 
     const loginButtonSelector = "#accept";
     logger.debug(`[${uniqueSessionId}] Waiting for login button`);
+    // Wait for the login button to be visible.
     await page.waitForSelector(loginButtonSelector, { timeout: 6000, visible: true });
     logger.debug(`[${uniqueSessionId}] Clicking login button`);
+    // Click the login button with a slight delay.
     await page.click(loginButtonSelector, { delay: 100 });
 
-    // Kurze Wartezeit, damit der Klick verarbeitet wird:
+    // Short wait to allow the click action to be processed.
     await setTimeoutPromise(1000);
 
+    // If a response with status 418 was received, abort further actions.
     if (bannedStatus) {
       logger.warn(`[${uniqueSessionId}] Aborting further actions due to 418 status`);
       return "ACCOUNT_BANNED";
     }
 
+    // If the code was found immediately after clicking the login button, return it.
     if (foundCode) {
       logger.info(`[${uniqueSessionId}] Code found immediately after login click => success`);
       return foundCode;
@@ -95,14 +105,17 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
     let currentUrl = page.url();
     logger.info(`[${uniqueSessionId}] URL after login click: ${currentUrl}`);
 
-    // Falls eine Consent-Seite erkannt wird, versuche den Allow-Flow:
+    // If a consent page is detected and no code or banned status is set, attempt the allow flow.
     if (currentUrl.includes("consent") && !foundCode && !bannedStatus) {
       logger.info(`[${uniqueSessionId}] Consent page detected. Processing allow step.`);
       try {
         logger.debug(`[${uniqueSessionId}] Waiting for allow button on consent page`);
+        // Wait for the allow button to appear.
         await page.waitForSelector(loginButtonSelector, { timeout: 10000, visible: true });
         logger.debug(`[${uniqueSessionId}] Clicking allow button on consent page`);
+        // Click the allow button.
         await page.click(loginButtonSelector, { delay: 100 });
+        // Wait for navigation to complete.
         await page.waitForNavigation({ timeout: 30000 });
       } catch (allowErr) {
         logger.warn(`[${uniqueSessionId}] Error during consent allow step: ${allowErr.message}`);
@@ -117,6 +130,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
 
     currentUrl = page.url();
     logger.info(`[${uniqueSessionId}] Final URL: ${currentUrl}`);
+    // Attempt to extract the ory-code from the final URL.
     const finalMatch = oryRegex.exec(currentUrl);
     if (finalMatch) {
       logger.info(`[${uniqueSessionId}] Found ory-code in final URL => ${finalMatch[0]}`);
@@ -128,6 +142,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
   })();
 
   try {
+    // Execute the login process with a race against the global timeout.
     const result = await Promise.race([loginProcess, timeoutPromise]);
     clearTimeout(timeoutHandle);
     return result;
@@ -135,7 +150,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
     logger.error(`[${uniqueSessionId}] Global login error: ${error.message}`);
     return false;
   } finally {
-    // Entferne den Response-Listener, um Speicherlecks zu vermeiden
+    // Remove the response listener to prevent memory leaks.
     page.off('response', responseListener);
   }
 }
