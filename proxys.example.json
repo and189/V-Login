@@ -1,5 +1,3 @@
-[
-  "http://xxx:xxxx@198.23.239.134:6540",
-  "http://xxxxx:xxx@64.137.42.112:5157",
-  "http://xxxx:xxxxx@173.211.0.148:6641"
-]
+http://user:password@proxy1.example.com:8080
+http://user:password@proxy2.example.com:8080
+http://proxy3.example.com:3128
