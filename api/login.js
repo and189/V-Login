@@ -1,3 +1,4 @@
+// api/login.js
 const express = require('express');
 const router = express.Router();
 const { loginWithRetry } = require('../core/login_with_retry');
@@ -7,13 +8,13 @@ const { v4: uuidv4 } = require('uuid');
 const { URLSearchParams } = require('url');
 const { getNextProxy } = require('../utils/proxyPool');
 
-// --- NEW: Global variable to track if a request is running
+// --- NEU: Globale Variable, um zu tracken, ob eine Anfrage läuft
 let isBusy = false;
 
 router.post('/', async (req, res) => {
-  // 1. Check if a request is already in progress
+  // 1. Prüfen, ob bereits eine Anfrage läuft
   if (isBusy) {
-    // Reject the request (e.g., 503 - Service Unavailable)
+    // Anfrage wird abgelehnt (z. B. 503 - Service Unavailable)
     logger.warn('Another login request is already in progress, rejecting new request.');
     return res.status(503).json({
       status: AuthResponseStatus.ERROR,
@@ -21,7 +22,7 @@ router.post('/', async (req, res) => {
     });
   }
 
-  // 2. Mark that a request is now being processed
+  // 2. Markieren, dass jetzt eine Anfrage bearbeitet wird
   isBusy = true;
 
   const startTime = Date.now();
@@ -40,7 +41,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // 1. Get proxy from the pool
+    // 1. Proxy aus dem Pool holen
     let proxy;
     try {
       proxy = getNextProxy();
@@ -53,7 +54,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // 2. (Optional) Configuration parameters as query string
+    // 2. (Optional) Konfigurationsparameter als Query-String
     const config = {
       proxy,
       platform: 'mac',
@@ -62,13 +63,13 @@ router.post('/', async (req, res) => {
     const query = new URLSearchParams({ config: JSON.stringify(config) });
     logger.info(`Config: ${JSON.stringify(config)}`);
 
-    // 3. Start login attempt
-    logger.info(`Starting first login attempt...`); 
+    // 3. Login-Versuch starten
+    logger.info(`Starting first login attempt...`);
     const result = await loginWithRetry(url, username, password, proxy);
 
     logger.info(`Request processed in ${(Date.now() - startTime) / 1000}s`);
 
-    // Error handling
+    // Fehlerbehandlung
     if (result.error) {
       if (result.error === "IP_BLOCKED") {
         logger.warn(`IP blocked => waiting 60s => no response`);
@@ -76,18 +77,11 @@ router.post('/', async (req, res) => {
         logger.warn(`60s over => returning silently`);
         return;
       }
-      if (["ACCOUNT_BANNED", "IMPERVA_BLOCKED"].includes(result.error)) {
+      if (["ACCOUNT_BANNED", "IMPERVA_BLOCKED", "LOGIN_FAILED"].includes(result.error)) {
         logger.warn(`BANNED => 418`);
         return res.status(418).json({
           status: AuthResponseStatus.BANNED,
           description: "Account is banned or Imperva blocked"
-        });
-      }
-      if (result.error === "LOGIN_FAILED") {
-        logger.warn(`Invalid credentials => 400`);
-        return res.status(400).json({
-          status: AuthResponseStatus.INVALID,
-          description: "Invalid credentials or login error"
         });
       }
       logger.error(`Unhandled error => 500 => ${result.error}`);
@@ -97,7 +91,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Success
+    // Erfolg
     if (result.token) {
       logger.info(`SUCCESS => 200, login_code: ${result.token}`);
       return res.status(200).json({
@@ -120,8 +114,8 @@ router.post('/', async (req, res) => {
       description: "Internal server error"
     });
   } finally {
-    // 3. Release the lock so the next request can be processed
-    isBusy = false; 
+    // 3. Freigeben, damit die nächste Anfrage bearbeitet werden kann
+    isBusy = false;
   }
 });
 
