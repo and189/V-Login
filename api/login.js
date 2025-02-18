@@ -27,14 +27,13 @@ router.post('/', async (req, res) => {
 
   const startTime = Date.now();
   const requestId = uuidv4();
-  logger.setRequestId(requestId); // Set the requestId for this request
-  logger.info(`Received login request`);
+  logger.info(`Received login request - Request ID: ${requestId}`);
 
   try {
     const { url, username, password } = req.body;
     const required = ["url", "username", "password"];
     if (!required.every(key => req.body[key])) {
-      logger.error(`Missing required parameters`);
+      logger.error(`[Request ID: ${requestId}] Missing required parameters`);
       return res.status(400).json({
         status: AuthResponseStatus.ERROR,
         description: "Missing required parameters"
@@ -45,9 +44,9 @@ router.post('/', async (req, res) => {
     let proxy;
     try {
       proxy = getNextProxy();
-      logger.info(`Using proxy: ${proxy}`);
+      logger.info(`[Request ID: ${requestId}] Using proxy: ${proxy}`);
     } catch (error) {
-      logger.error(`No available proxy!`);
+      logger.error(`[Request ID: ${requestId}] No available proxy!`);
       return res.status(503).json({
         status: AuthResponseStatus.ERROR,
         description: "No proxy available at the moment."
@@ -61,30 +60,37 @@ router.post('/', async (req, res) => {
       kernel: 'chromium'
     };
     const query = new URLSearchParams({ config: JSON.stringify(config) });
-    logger.info(`Config: ${JSON.stringify(config)}`);
+    logger.info(`[Request ID: ${requestId}] Config: ${JSON.stringify(config)}`);
 
     // 3. Login-Versuch starten
-    logger.info(`Starting first login attempt...`);
+    logger.info(`[Request ID: ${requestId}] Starting first login attempt...`);
     const result = await loginWithRetry(url, username, password, proxy);
 
-    logger.info(`Request processed in ${(Date.now() - startTime) / 1000}s`);
+    logger.info(`[Request ID: ${requestId}] Request processed in ${(Date.now() - startTime) / 1000}s`);
 
     // Fehlerbehandlung
     if (result.error) {
       if (result.error === "IP_BLOCKED") {
-        logger.warn(`IP blocked => waiting 60s => no response`);
+        logger.warn(`[Request ID: ${requestId}] IP blocked => waiting 60s => no response`);
         await new Promise(resolve => setTimeout(resolve, 60000));
-        logger.warn(`60s over => returning silently`);
+        logger.warn(`[Request ID: ${requestId}] 60s over => returning silently`);
         return;
       }
-      if (["ACCOUNT_BANNED", "IMPERVA_BLOCKED", "LOGIN_FAILED"].includes(result.error)) {
-        logger.warn(`BANNED => 418`);
+      if (["ACCOUNT_BANNED", "IMPERVA_BLOCKED"].includes(result.error)) {
+        logger.warn(`[Request ID: ${requestId}] BANNED => 418`);
         return res.status(418).json({
           status: AuthResponseStatus.BANNED,
           description: "Account is banned or Imperva blocked"
         });
       }
-      logger.error(`Unhandled error => 500 => ${result.error}`);
+      if (result.error === "LOGIN_FAILED") {
+        logger.warn(`[Request ID: ${requestId}] Invalid credentials => 400`);
+        return res.status(400).json({
+          status: AuthResponseStatus.INVALID,
+          description: "Invalid credentials or login error"
+        });
+      }
+      logger.error(`[Request ID: ${requestId}] Unhandled error => 500 => ${result.error}`);
       return res.status(500).json({
         status: AuthResponseStatus.ERROR,
         description: result.description || "Internal server error"
@@ -93,7 +99,7 @@ router.post('/', async (req, res) => {
 
     // Erfolg
     if (result.token) {
-      logger.info(`SUCCESS => 200, login_code: ${result.token}`);
+      logger.info(`[Request ID: ${requestId}] SUCCESS => 200, login_code: ${result.token}`);
       return res.status(200).json({
         status: AuthResponseStatus.SUCCESS,
         login_code: result.token,
@@ -101,14 +107,14 @@ router.post('/', async (req, res) => {
       });
     }
 
-    logger.error(`No error, no token => unexpected => 500`);
+    logger.error(`[Request ID: ${requestId}] No error, no token => unexpected => 500`);
     return res.status(500).json({
       status: AuthResponseStatus.ERROR,
       description: "No token found unexpectedly"
     });
 
   } catch (error) {
-    logger.error(`API error: ${error}`);
+    logger.error(`[Request ID: ${requestId}] API error: ${error}`);
     return res.status(500).json({
       status: AuthResponseStatus.ERROR,
       description: "Internal server error"
