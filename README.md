@@ -1,68 +1,35 @@
 # V-Login
 
-## Architecture & Technology
+## Architektur & Technologie
 
-Our solution is based on **browserless**, a Docker container that provides a fully functional headless browser (NSTChrome) and is accessible via a WebSocket endpoint. Instead of launching a new browser for every request, browserless efficiently manages multiple browser sessions, activating only the necessary instances "on demand."
+Unsere Lösung basiert auf **browserless**, einem Docker-Container, der einen voll funktionsfähigen Headless-Browser (NSTChrome) bereitstellt und über einen WebSocket-Endpunkt zugänglich ist. Anstatt für jede Anfrage einen neuen Browser zu starten, verwaltet Browserless effizient mehrere Browser-Sitzungen und aktiviert nur die erforderlichen Instanzen "on demand".
 
-### How Does Browserless Work?
+### Wie funktioniert Browserless?
 
--   **Remote DevTools & WebSocket API:**
-    Browserless offers an API accessible via WebSockets. This allows remote control of the browser using the Chrome DevTools Protocol. Our application connects to this endpoint to start a browser session and use it for automated tasks.
+-   **Remote DevTools & WebSocket API:** Browserless bietet eine API, die über WebSockets zugänglich ist. Dies ermöglicht die Fernsteuerung des Browsers mithilfe des Chrome DevTools Protocol. Unsere Anwendung verbindet sich mit diesem Endpunkt, um eine Browser-Sitzung zu starten und diese für automatisierte Aufgaben zu nutzen.
+-   **Effiziente Sitzungsverwaltung:** Anstatt für jede einzelne Anfrage einen vollständigen Browser zu starten, verwaltet Browserless intern Browser-Sitzungen. Dies schont Ressourcen und ermöglicht ein schnelles, skalierbares Automatisierungs-Setup.
+-   **Validierte Fingerabdrücke:** Das nstbrowser-Projekt enthält eine Datenbank gültiger Fingerabdrücke und weiß, wie diese verschleiert werden müssen. Dadurch wird sichergestellt, dass automatisierte Prozesse so menschenähnlich wie möglich erscheinen und die Wahrscheinlichkeit, blockiert zu werden (z. B. von Imperva), minimiert wird.
 
--   **Efficient Session Management:**
-    Instead of launching a complete browser for every single request, browserless manages browser sessions internally. This conserves resources and enables a fast, scalable automation setup.
+### Warum ist das ideal für Automation?
 
--   **Validated Fingerprints:**
-    The nstbrowser project includes a database of valid fingerprints and knows how to obfuscate them. This ensures that automated processes appear as human-like as possible, minimizing the chance of being blocked (e.g., by Imperva).
+-   **Ressourcenschonend:** Da Browserless mehrere Sitzungen innerhalb eines einzigen Containers verwaltet, werden Ressourcen effizient genutzt und es müssen nicht für jede Anfrage separate Browser-Instanzen gestartet werden.
+-   **Schnelle Antwortzeiten:** Die Verwendung der WebSocket-API ermöglicht eine nahezu sofortige Steuerung des Browsers, was in Kombination mit optimierten Fingerabdrücken zu schnellen und zuverlässigen Automatisierungen führt.
+-   **Flexibilität und Skalierbarkeit:** Die modulare Architektur ermöglicht die einfache Integration zusätzlicher Workflows (z. B. dynamische Fingerabdrücke und IP-Verwaltung). Dadurch eignet sich das System gut für komplexe Automatisierungsszenarien.
 
-### Why Is This Ideal for Automation?
+Diese Architektur macht unsere Lösung besonders leistungsstark - ideal für automatisierte Authentifizierungen, Datenextraktion und andere Aufgaben, die zuverlässige Browser-Interaktionen erfordern.
 
--   **Resource Efficient:**
-    Because browserless manages multiple sessions within a single container, resources are used efficiently, and separate browser instances do not need to be launched for every request.
+## Voraussetzungen
 
--   **Fast Response Times:**
-    Using the WebSocket API enables near-instant control of the browser, which, combined with optimized fingerprints, leads to fast and reliable automations.
+Stelle sicher, dass die folgenden Voraussetzungen auf deinem System erfüllt sind:
 
--   **Flexibility and Scalability:**
-    The modular architecture allows for the easy integration of additional workflows (e.g., dynamic fingerprinting and IP management). This makes the system well-suited for complex automation scenarios.
-
-This architecture makes our solution particularly powerful – ideal for automated authentications, data extraction, and other tasks that require reliable browser interactions.
-
-## Prerequisites
-
-Ensure the following prerequisites are met on your system:
-
--   Node.js (recommended: the latest LTS version)
+-   Node.js (empfohlen: die neueste LTS-Version)
 -   Docker
-
 
 ## Installation
 
-Follow these steps in the given order to install and run the application:
+Folge diesen Schritten in der angegebenen Reihenfolge, um die Anwendung zu installieren und auszuführen:
 
-1.  **Install pnpm**
+### 1. pnpm installieren
 
-    ```bash
-    npm install -g pnpm@latest-10
-    ```
-
-2.  **Install Dependencies**
-
-    ```bash
-    pnpm install
-    ```
-    set proxys in proxys.json or emtpy json
-
-3  **Build**
-
-    ```bash
-    sudo docker compose build 
-    ```
-
-4.  **Start the V-Login & Browserless Docker Container**
-
-    This command runs the container in the host network and removes it automatically when it stops:
-
-    ```bash
-    sudo docker compose up -d 
-    ```
+```bash
+npm install -g pnpm@latest-10
