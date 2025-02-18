@@ -56,9 +56,7 @@ Follow these steps in the given order to install and run the application:
 3  **Build**
 
     ```bash
-    
-    sudo docker compose build
-    
+    sudo docker compose build 
     ```
 
 4.  **Start the V-Login & Browserless Docker Container**
