@@ -33,7 +33,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
         const url = response.url();
         const match = oryRegex.exec(url);
         if (match) {
-          foundCode = match[0];
+          foundCode = match;
           logger.info(`[${uniqueSessionId}] Found ory-code => ${foundCode}`);
         }
       }
@@ -102,11 +102,10 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
       return foundCode;
     }
 
-    let currentUrl = page.url();
-    logger.info(`[${uniqueSessionId}] URL after login click: ${currentUrl}`);
+    logger.info(`[${uniqueSessionId}] Navigated to the login page`); 
 
     // If a consent page is detected and no code or banned status is set, attempt the allow flow.
-    if (currentUrl.includes("consent") && !foundCode && !bannedStatus) {
+    if (currentUrl.includes("consent") &&!foundCode &&!bannedStatus) {
       logger.info(`[${uniqueSessionId}] Consent page detected. Processing allow step.`);
       try {
         logger.debug(`[${uniqueSessionId}] Waiting for allow button on consent page`);
@@ -128,13 +127,13 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
       return foundCode;
     }
 
-    currentUrl = page.url();
-    logger.info(`[${uniqueSessionId}] Final URL: ${currentUrl}`);
+    logger.info(`[${uniqueSessionId}] Navigation after login completed`); 
+
     // Attempt to extract the ory-code from the final URL.
     const finalMatch = oryRegex.exec(currentUrl);
     if (finalMatch) {
-      logger.info(`[${uniqueSessionId}] Found ory-code in final URL => ${finalMatch[0]}`);
-      return finalMatch[0];
+      logger.info(`[${uniqueSessionId}] Found ory-code in final URL => ${finalMatch}`);
+      return finalMatch;
     }
 
     logger.warn(`[${uniqueSessionId}] No code found => login failed`);
