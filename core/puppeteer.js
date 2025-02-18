@@ -210,7 +210,7 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
 async function launchAndConnectToBrowser(initialAuthUrl, username, password, proxyIndicator) {
   const host = 'localhost:8848';
   const config = {
-    name: 'testProfile',
+    name: 'V-Login',
     once: true,
     platform: 'windows',
     kernel: 'chromium',
@@ -219,20 +219,6 @@ async function launchAndConnectToBrowser(initialAuthUrl, username, password, pro
     skipProxyChecking: true,
     autoClose: true,
     clearCacheOnClose: true,
-    fingerprint: {
-      flags: {
-        timezone: 'BasedOnIp',
-        screen: 'Custom'
-      },
-      screen: {
-        width: 1000,
-        height: 1000
-      },
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.6613.85 Safari/537.36'
-    },
-    args: {
-      '--proxy-bypass-list': 'domain1,domain2',
-    }
   };
 
   // Determine whether to use a provided proxy or fetch one from the proxy pool.
