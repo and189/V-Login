@@ -20,6 +20,6 @@ services:
     environment:
       - PORT=5090
     volumes:
-      # Mountet die proxys.json aus dem Hauptverzeichnis in den Container (nur lesend)
-      - ./proxys.json:/app/proxys.json:ro
+      # Mounts the proxies.txt from the main directory into the container (read-only)
+      - ./proxies.txt:/app/proxies.txt:ro
     restart: unless-stopped
