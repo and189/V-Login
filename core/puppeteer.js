@@ -217,7 +217,7 @@ async function launchAndConnectToBrowser(initialAuthUrl, username, password, pro
     timedCloseSec: 60,
     kernelMilestone: '130',
     skipProxyChecking: true,
-    autoClose: true,
+    //autoClose: true,
     clearCacheOnClose: true,
   };
 
@@ -238,7 +238,7 @@ async function launchAndConnectToBrowser(initialAuthUrl, username, password, pro
 
   // Construct the WebSocket endpoint URL with the encoded configuration.
   const browserWSEndpoint = `ws://${host}/devtool/launch?config=${encodeURIComponent(JSON.stringify(config))}`;
-  logger.info(`Browser WS Endpoint: ${browserWSEndpoint}`);
+  logger.debug(`Browser WS Endpoint: ${browserWSEndpoint}`);
 
   // Initiate the Puppeteer session using the constructed WebSocket endpoint.
   return await runPuppeteer(initialAuthUrl, username, password, browserWSEndpoint);
