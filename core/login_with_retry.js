@@ -7,77 +7,77 @@ const { launchAndConnectToBrowser } = require('./puppeteer');
 const { getNextProxy } = require('../utils/proxyPool');
 
 /**
- * Wartet darauf, dass sich die öffentliche IP vom previousIp ändert.
- * @param {string} previousIp - Die aktuell gesperrte (lokale) IP.
- * @param {number} checkIntervalMs - Wie oft (in ms) die IP geprüft wird (Standard: 60000 ms).
- * @returns {Promise<string>} - Die neue IP, sobald sie sich ändert.
+ * Waits until the public IP changes from the given previousIp.
+ * @param {string} previousIp - The currently blocked (local) IP.
+ * @param {number} checkIntervalMs - How often (in ms) the IP is checked (default: 60000 ms).
+ * @returns {Promise<string>} - The new IP as soon as it changes.
  */
 async function waitForNewIp(previousIp, checkIntervalMs = 60000) {
   let currentIp = previousIp;
-  logger.info(`Lokale IP gesperrt. Warte auf neue IP (aktuelle IP: ${previousIp})...`);
-  
-  // Polling Loop: Überprüfen, ob sich die IP geändert hat.
+  logger.info(`Local IP blocked. Waiting for a new IP (current IP: ${previousIp})...`);
+
+  // Polling loop: keep checking if the IP has changed.
   while (currentIp === previousIp) {
     await setTimeoutPromise(checkIntervalMs);
     try {
       currentIp = await getCurrentIp();
-      logger.info(`Aktuelle IP erneut abgefragt: ${currentIp}`);
+      logger.info(`Checked current IP: ${currentIp}`);
     } catch (error) {
-      logger.warn(`Fehler beim Abfragen der aktuellen IP: ${error.message}`);
+      logger.warn(`Error retrieving current IP: ${error.message}`);
     }
   }
 
-  logger.info(`Neue IP erkannt: ${currentIp}`);
+  logger.info(`New IP detected: ${currentIp}`);
   return currentIp;
 }
 
 /**
- * Versucht, sich einzuloggen. Wenn ein "IP_BLOCKED"-Fehler erkannt wird:
- *  - Ohne Proxy (lokale IP) -> warte auf IP-Wechsel und versuche erneut.
- *  - Mit Proxy -> sofortigen Wechsel auf einen anderen Proxy (falls vorhanden).
+ * Attempts to log in. If an "IP_BLOCKED" error occurs:
+ *  - Without a proxy (local IP), it waits for the IP to change, then retries.
+ *  - With a proxy, it immediately skips to the next proxy in the pool (if available).
  *
- * @param {string} url - Die Login-URL.
- * @param {string} username - Der Benutzername.
- * @param {string} password - Das Passwort.
- * @param {string} [proxy] - (Optional) Wenn gesetzt, wird dieser Proxy verwendet.
- * @returns {Promise<Object>} - Das Ergebnis des Login-Prozesses.
+ * @param {string} url - The login URL.
+ * @param {string} username - The username.
+ * @param {string} password - The password.
+ * @param {string} [proxy] - (Optional) If provided, this proxy will be used.
+ * @returns {Promise<Object>} - The result of the login process.
  */
 async function loginWithRetry(url, username, password, proxy) {
-  logger.info("Starte ersten Login-Versuch ...");
+  logger.info("Starting first login attempt...");
   let result = await launchAndConnectToBrowser(url, username, password, proxy);
 
-  // Prüfen, ob eine IP-Sperre aufgetreten ist
+  // Check if an IP_BLOCKED error was encountered
   if (result.error === "IP_BLOCKED") {
-    // Fall A: Lokale IP ist gesperrt (kein Proxy angegeben oder leer)
+    // Case A: Local IP is blocked (no proxy specified or empty)
     if (!proxy || !proxy.trim()) {
-      logger.warn("Lokale IP wurde gesperrt. Warte, bis sich die IP ändert ...");
+      logger.warn("Local IP is blocked. Waiting for IP to change...");
       try {
         const previousIp = await getCurrentIp();
-        // Auf IP-Wechsel warten
+        // Wait for IP to change
         await waitForNewIp(previousIp);
-        
-        // Erneuter Login-Versuch (weiterhin ohne Proxy)
-        logger.info("Versuche erneut, nachdem sich die lokale IP geändert hat ...");
+
+        // Retry login attempt (still without proxy)
+        logger.info("Retrying after local IP change...");
         result = await launchAndConnectToBrowser(url, username, password);
       } catch (error) {
-        logger.error(`Fehler während des IP-Wechsels: ${error.message}`);
+        logger.error(`Error during IP change wait: ${error.message}`);
       }
 
-    // Fall B: Proxy ist gesperrt -> direkt auf den nächsten Proxy wechseln
+    // Case B: Proxy is blocked -> skip directly to another proxy
     } else {
-      logger.warn(`Proxy gesperrt: ${proxy}. Versuche, anderen Proxy aus dem Pool zu holen ...`);
+      logger.warn(`Proxy is blocked: ${proxy}. Trying to get a different proxy from the pool...`);
       const newProxy = getNextProxy();
-      
+
       if (!newProxy) {
-        logger.error("Kein weiterer Proxy im Pool verfügbar. Breche ab.");
-        return result; // oder ggf. throw new Error(...) oder ein anderes Handling
+        logger.error("No additional proxies available in the pool. Aborting.");
+        return result; // or throw an error, or handle as you prefer
       }
 
-      logger.info(`Neuer Proxy gewählt: ${newProxy}. Starte neuen Login-Versuch ...`);
+      logger.info(`Chosen new proxy: ${newProxy}. Retrying login...`);
       result = await launchAndConnectToBrowser(url, username, password, newProxy);
     }
   } else {
-    logger.debug("Kein IP_BLOCKED-Fehler oder es wurde kein Proxy-Fehler erkannt. Kein Wechsel nötig.");
+    logger.debug("No IP_BLOCKED error detected or proxy was already in use. No action needed.");
   }
 
   return result;
