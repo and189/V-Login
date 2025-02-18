@@ -36,7 +36,7 @@ const DEFAULT_LOCK_DURATION_MS = 10 * 60 * 1000;
 const MAX_LOCK_DURATION_MS = 12 * 60 * 60 * 1000;
 
 /**
- * Returns the next available proxy and locks it for its current cooldown.
+ * Returns the next available proxy at random and locks it for its current cooldown.
  * If all proxies are locked or none are configured, returns null.
  */
 function getNextProxy() {
@@ -45,19 +45,27 @@ function getNextProxy() {
   }
   
   const now = Date.now();
-
-  for (const proxy of proxyList) {
-    const lockedUntil = lockedProxies[proxy];
-    if (!lockedUntil || lockedUntil < now) {
-      // Use the currently stored cooldown or the default value.
-      const cooldown = proxyCooldowns[proxy] || DEFAULT_LOCK_DURATION_MS;
-      lockedProxies[proxy] = now + cooldown;
-      return proxy;
-    }
-  }
   
-  // If all proxies are locked, return null (local IP will be used)
-  return null;
+  // Collect all currently unlocked (not locked) proxies.
+  const unlockedProxies = proxyList.filter(proxy => {
+    const lockedUntil = lockedProxies[proxy];
+    return !lockedUntil || lockedUntil < now;
+  });
+
+  // If no unlocked proxies are available, return null.
+  if (unlockedProxies.length === 0) {
+    return null;
+  }
+
+  // Choose a random proxy from the unlocked list.
+  const randomIndex = Math.floor(Math.random() * unlockedProxies.length);
+  const chosenProxy = unlockedProxies[randomIndex];
+
+  // Use the currently stored cooldown or the default value.
+  const cooldown = proxyCooldowns[chosenProxy] || DEFAULT_LOCK_DURATION_MS;
+  lockedProxies[chosenProxy] = now + cooldown;
+
+  return chosenProxy;
 }
 
 /**
@@ -79,7 +87,7 @@ function reportProxyFailure(proxy) {
  */
 function reportProxySuccess(proxy) {
   proxyCooldowns[proxy] = DEFAULT_LOCK_DURATION_MS;
-  // Optional: If desired, the proxy can be locked again.
+  // Optional: If desired, the proxy can be locked again here.
 }
 
 /**
