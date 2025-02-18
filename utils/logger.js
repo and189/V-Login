@@ -1,6 +1,7 @@
 // utils/logger.js
 const winston = require('winston');
-const chalk = require('chalk');
+const chalkLib = require('chalk');
+const chalk = chalkLib.default || chalkLib;
 
 // Default log level – in development you can set this to "debug".
 const logLevel = process.env.LOG_LEVEL || 'info';
@@ -15,7 +16,7 @@ const fileFormat = winston.format.printf(({ timestamp, level, message, ...meta }
 const consoleFormat = winston.format.printf(({ timestamp, level, message, ...meta }) => {
   let coloredMessage = message;
 
-  // If the message contains "SUCCESS" or "ory-code" or "ory token", color it green.
+  // If the message contains "SUCCESS", "ory-code" or "ory token", color it green.
   if (message.includes('SUCCESS') || message.includes('ory-code') || message.includes('ory token')) {
     coloredMessage = chalk.green(message);
   } 
