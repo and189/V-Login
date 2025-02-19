@@ -7,15 +7,15 @@ const { launchAndConnectToBrowser } = require('./puppeteer');
 const { getNextProxy } = require('../utils/proxyPool');
 
 /**
- * Waits for the public IP to change from the previousIp.
+ * Waits for the local IP to change from the previousIp.
  * @param {string} previousIp - The currently banned (local) IP.
  * @param {number} checkIntervalMs - How often (in ms) to check the IP (default: 60000 ms).
  * @returns {Promise<string>} - The new IP once it changes.
  */
 async function waitForNewIp(previousIp, checkIntervalMs = 60000) {
   let currentIp = previousIp;
-  logger.info(`Local IP is blocked. Waiting for new IP (current IP: ${previousIp})...`);
-  
+  logger.info(`Local IP is blocked. Waiting for a new IP (current IP: ${previousIp})...`);
+
   // Polling loop: Check every checkIntervalMs if the IP has changed.
   while (currentIp === previousIp) {
     await setTimeoutPromise(checkIntervalMs);
@@ -32,51 +32,56 @@ async function waitForNewIp(previousIp, checkIntervalMs = 60000) {
 }
 
 /**
- * Attempts to log in. If an "IP_BLOCKED" error is detected:
- *  - Without proxy (local IP): waits for IP change and retries.
- *  - With proxy: immediately switches to another proxy from the pool.
+ * Tries to log in using `launchAndConnectToBrowser`.
+ * Handles "IP_BLOCKED" and "NAVIGATION_TIMEOUT" errors:
+ *   - If no proxy is used (local IP): wait for new IP, then retry.
+ *   - If a proxy is used: immediately pick another proxy from the pool.
  *
- * @param {string} url      - The login URL.
- * @param {string} username - The username.
- * @param {string} password - The password.
- * @param {string} [proxy]  - (Optional) If provided, this proxy is used.
- * @returns {Promise<Object>} - The result of the login process.
+ * @param {string} url - The login/authentication URL.
+ * @param {string} username - The username for login.
+ * @param {string} password - The password for login.
+ * @param {string} [proxy] - (Optional) If provided, this proxy is used first.
+ * @returns {Promise<Object>} - The result of the login process ({ token: <string> } or { error: <string> }).
  */
 async function loginWithRetry(url, username, password, proxy) {
   logger.info("Starting initial login attempt...");
+
+  // First attempt with the provided proxy (or no proxy if none is given).
   let result = await launchAndConnectToBrowser(url, username, password, proxy);
 
-  // Check if an IP block occurred.
-  if (result.error === "IP_BLOCKED") {
-    // Case A: Local IP is blocked (no proxy provided or empty)
+  // Check if we must handle IP_BLOCKED or NAVIGATION_TIMEOUT
+  if (result.error === "IP_BLOCKED" || result.error === "NAVIGATION_TIMEOUT") {
+    // If no proxy is used => local IP is blocked or timed out
     if (!proxy || !proxy.trim()) {
-      logger.warn("Local IP is blocked. Waiting for IP change...");
+      logger.warn(`Local IP issue ("${result.error}"). We'll wait for a new IP...`);
       try {
         const previousIp = await getCurrentIp();
-        // Wait for IP change.
+        // Wait for local IP to change
         await waitForNewIp(previousIp);
         
-        // Retry login attempt (still using local IP).
-        logger.info("Retrying login after local IP change...");
+        // Retry login attempt (still local IP)
+        logger.info("Retrying login after local IP changed...");
         result = await launchAndConnectToBrowser(url, username, password);
       } catch (error) {
-        logger.error(`Error during IP change waiting: ${error.message}`);
+        logger.error(`Error while waiting for IP change: ${error.message}`);
       }
-    // Case B: Proxy is blocked -> immediately switch to another proxy.
+
+    // Otherwise, we used a proxy => pick a new proxy right away
     } else {
-      logger.warn(`Proxy blocked: ${proxy}. Attempting to fetch another proxy from the pool...`);
-      const newProxy = getNextProxy();
-      
+      logger.warn(`Proxy issue ("${result.error}") for proxy: ${proxy}. Attempting another proxy...`);
+      const newProxy = await getNextProxy();
+
       if (!newProxy) {
-        logger.error("No additional proxy available in the pool. Aborting.");
-        return result; // Alternatively, you can throw an error or handle it differently.
+        logger.error("No more proxies available in the pool. Aborting.");
+        return result; // Or throw an error, if that's your desired behavior.
       }
 
       logger.info(`New proxy selected: ${newProxy}. Starting a new login attempt...`);
       result = await launchAndConnectToBrowser(url, username, password, newProxy);
     }
   } else {
-    logger.debug("No IP_BLOCKED error detected or no proxy error. No switch needed.");
+    // If there's no IP_BLOCKED or NAVIGATION_TIMEOUT error, nothing special to do.
+    logger.debug("No IP_BLOCKED/NAVIGATION_TIMEOUT error. No switch needed.");
   }
 
   return result;
