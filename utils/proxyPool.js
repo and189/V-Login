@@ -3,50 +3,50 @@ const path = require('path');
 const { URL } = require('url');
 
 // ------------------------------------
-// Einstellungen
+// Settings
 // ------------------------------------
 
-// Standard-Cooldown (für Proxys, die zum ersten Mal verwendet werden
-// oder erfolgreich waren)
-const DEFAULT_LOCK_DURATION_MS = 10 * 1000; // z.B. 10 Sekunden als Beispiel
-// Statt 10 Minuten – passe an, wie du möchtest
+// Default cooldown for newly used or successful proxies (example: 10s)
+const DEFAULT_LOCK_DURATION_MS = 10 * 1000; 
 
-// Längster möglicher Lock (z.B. 12 Stunden)
-const MAX_LOCK_DURATION_MS = 12 * 60 * 60 * 1000; // 12 Stunden
+// Maximum lock duration (e.g., 12 hours)
+const MAX_LOCK_DURATION_MS = 12 * 60 * 60 * 1000; 
 
-// Faktor, mit dem der Lock bei einem Fehlschlag verlängert wird
-const FAILURE_MULTIPLIER = 2; 
+// Factor by which cooldown extends on failure
+const FAILURE_MULTIPLIER = 2;
 
-// Dateiname, in dem wir Proxy-Statistiken speichern
+// Where we save stats about each proxy
 const PROXY_STATS_FILE = path.join(process.cwd(), 'proxyStats.json');
 
-// Pfad zu deiner proxies.txt
+// The path to your proxies.txt
 const PROXIES_TXT_FILE = path.join(process.cwd(), 'proxies.txt');
 
 // ------------------------------------
-// Globale Variablen
+// Global Variables
 // ------------------------------------
 
 /** 
- * Array mit allen Proxys (gelesen aus proxies.txt).
- * Format pro Zeile: 
- *  http://user:pass@host:port 
+ * Array of all proxies (read from proxies.txt).
+ * Example lines:
+ *   http://user:pass@host:port
+ *   http://host:port
+ *   or just host:port (we'll fix it to http://host:port)
  */
 let proxyList = [];
 
 /**
- * Sperr-Status: speichert für jeden Proxy, bis wann er gesperrt ist (timestamp in ms).
- * Beispiel: lockedProxies[proxy] = 1675000000000 (Zeit in Zukunft)
+ * Tracks lock status for each proxy.
+ *   lockedProxies[proxyUrl] = timestamp_in_ms_until_unlocked
  */
 const lockedProxies = {};
 
 /**
- * Enthält Stats pro Proxy, z.B.:
+ * Stats for each proxy, e.g.:
  * {
- *   [proxyUrl]: {
- *       cooldown: number,   // Aktueller Lock/Cooldown in ms
- *       successCount: number,
- *       failCount: number
+ *   "http://user:pass@1.2.3.4:8080": {
+ *       cooldown: 10000,
+ *       successCount: 5,
+ *       failCount: 2
  *   },
  *   ...
  * }
@@ -54,11 +54,12 @@ const lockedProxies = {};
 let proxyStats = {};
 
 // ------------------------------------
-// 1. Proxys laden
+// 1. Load Proxies
 // ------------------------------------
 function loadProxies() {
   try {
     const fileContent = fs.readFileSync(PROXIES_TXT_FILE, 'utf8');
+    // Split lines, trim, remove empty lines
     proxyList = fileContent
       .split('\n')
       .map(line => line.trim())
@@ -71,7 +72,7 @@ function loadProxies() {
 }
 
 // ------------------------------------
-// 2. Stats laden/speichern
+// 2. Load/Save Stats
 // ------------------------------------
 function loadProxyStats() {
   try {
@@ -96,13 +97,13 @@ function saveProxyStats() {
 }
 
 // ------------------------------------
-// 3. Proxy-Auswahl
+// 3. Choose a Proxy
 // ------------------------------------
 
 /**
- *  getNextProxy:
- *  - gibt einen gerade nicht gesperrten Proxy zurück (per Zufall).
- *  - sperrt diesen Proxy sofort für dessen aktuellen "cooldown".
+ * getNextProxy:
+ *  - returns a currently-unlocked (not locked) proxy at random
+ *  - immediately locks it for the current cooldown
  */
 function getNextProxy() {
   if (proxyList.length === 0) {
@@ -111,90 +112,80 @@ function getNextProxy() {
 
   const now = Date.now();
 
-  // Liste der aktuell entsperrten (= benutzbaren) Proxys
+  // Filter out locked proxies
   const unlockedProxies = proxyList.filter(proxy => {
     const lockedUntil = lockedProxies[proxy];
     return !lockedUntil || lockedUntil < now;
   });
 
   if (unlockedProxies.length === 0) {
-    // Keine entsperrten Proxys verfügbar
+    // none available
     return null;
   }
 
-  // Zufällig einen Proxy aus den entsperrten wählen
+  // pick one at random
   const chosenProxy = unlockedProxies[Math.floor(Math.random() * unlockedProxies.length)];
 
-  // Cooldown aus Stats holen oder Standard verwenden
+  // lock it for "cooldown" ms
   const currentStats = getStatsForProxy(chosenProxy);
   const cooldown = currentStats.cooldown || DEFAULT_LOCK_DURATION_MS;
-
-  // Proxy sperren
   lockedProxies[chosenProxy] = now + cooldown;
 
   return chosenProxy;
 }
 
 /**
- * Wird aufgerufen, wenn ein Proxy fehlschlägt.
- * - erhöht die failCount
- * - verlängert den Cooldown (bis max. MAX_LOCK_DURATION_MS)
- * - sperrt den Proxy
+ * reportProxyFailure:
+ *  - increments failCount
+ *  - doubles the cooldown up to a max
+ *  - re-locks the proxy until now + newCooldown
  */
 function reportProxyFailure(proxy) {
   const now = Date.now();
   const stats = getStatsForProxy(proxy);
 
-  // Erhöhe failCount
   stats.failCount += 1;
 
-  // Verdopple den bisherigen Cooldown (oder nimm DEFAULT, falls nichts vorhanden)
-  let newCooldown = stats.cooldown ? stats.cooldown * FAILURE_MULTIPLIER : DEFAULT_LOCK_DURATION_MS * FAILURE_MULTIPLIER;
+  let newCooldown = stats.cooldown
+    ? stats.cooldown * FAILURE_MULTIPLIER
+    : DEFAULT_LOCK_DURATION_MS * FAILURE_MULTIPLIER;
+
   if (newCooldown > MAX_LOCK_DURATION_MS) {
     newCooldown = MAX_LOCK_DURATION_MS;
   }
   stats.cooldown = newCooldown;
 
-  // Sperren bis "now + newCooldown"
+  // re-lock
   lockedProxies[proxy] = now + newCooldown;
 
   saveProxyStats();
 }
 
 /**
- * Wird aufgerufen, wenn ein Proxy erfolgreich genutzt wurde.
- * - erhöht die successCount
- * - setzt die failCount zurück (optional)
- * - verringert den Cooldown auf den DEFAULT (oder noch weniger, z.B. 0)
+ * reportProxySuccess:
+ *  - increments successCount
+ *  - optionally resets failCount = 0
+ *  - sets cooldown back to default
+ *  - re-locks or unlocks the proxy
  */
 function reportProxySuccess(proxy) {
+  const now = Date.now();
   const stats = getStatsForProxy(proxy);
 
   stats.successCount += 1;
-  // Du könntest auch stats.failCount = 0 setzen, wenn du möchtest:
-  // stats.failCount = 0;
+  // stats.failCount = 0; // optional if you want to reset fails
 
-  // Beispiel: Setze den Cooldown zurück auf sehr klein, damit
-  // der Proxy möglichst schnell erneut genutzt werden kann.
-  // Du kannst auch auf 0 setzen (wenn du nie warten willst),
-  // oder z.B. 5 Sekunden, etc.
-  stats.cooldown = DEFAULT_LOCK_DURATION_MS; 
-  // lockedProxies[proxy] = Date.now() + stats.cooldown;
-  // -> Falls du ihn direkt sperren willst, aber nur kurz.
-
-  // Wenn du möchtest, dass er sofort wieder verfügbar ist:
-  lockedProxies[proxy] = Date.now();
+  stats.cooldown = DEFAULT_LOCK_DURATION_MS;
+  // if you want it immediately available:
+  lockedProxies[proxy] = now; 
+  // else lockedProxies[proxy] = now + stats.cooldown;
 
   saveProxyStats();
 }
 
 // ------------------------------------
-// 4. Stats-Helferfunktionen
+// 4. Stats Helpers
 // ------------------------------------
-/**
- * Holt das Stats-Objekt zu einem Proxy aus `proxyStats`.
- * Wenn es nicht existiert, wird es erzeugt.
- */
 function getStatsForProxy(proxy) {
   if (!proxyStats[proxy]) {
     proxyStats[proxy] = {
@@ -207,31 +198,39 @@ function getStatsForProxy(proxy) {
 }
 
 // ------------------------------------
-// 5. Proxy-URL/Authentifizierung
+// 5. Proxy URL / Auth
 // ------------------------------------
+
+/**
+ * fixProxyUrl:
+ *  - ensures we have a protocol, defaulting to http:// if missing
+ *  - if there's '@', tries to encode user/pass
+ */
 function fixProxyUrl(proxyUrl) {
-  const protocolSeparator = '://';
-  const protocolEnd = proxyUrl.indexOf(protocolSeparator);
-  if (protocolEnd === -1) {
-    // Kein Protokoll
-    return proxyUrl;
+  // If the user didn't provide "://", we prepend "http://"
+  if (!proxyUrl.includes('://')) {
+    proxyUrl = 'http://' + proxyUrl;
   }
 
-  const protocol = proxyUrl.slice(0, protocolEnd + protocolSeparator.length);
-  const remainder = proxyUrl.slice(protocolEnd + protocolSeparator.length);
+  // protocolEnd => where "://" finishes
+  const protocolSeparator = '://';
+  const protocolEnd = proxyUrl.indexOf(protocolSeparator) + protocolSeparator.length;
+  const protocol = proxyUrl.slice(0, protocolEnd);
+  const remainder = proxyUrl.slice(protocolEnd);
 
+  // if no '@', no credentials => just return
   const atIndex = remainder.lastIndexOf('@');
   if (atIndex === -1) {
-    // Keine Credentials enthalten
     return proxyUrl;
   }
 
+  // we have credentials
   const credentials = remainder.slice(0, atIndex);
   const hostPart = remainder.slice(atIndex + 1);
 
   const colonIndex = credentials.indexOf(':');
   if (colonIndex === -1) {
-    // Nur Username
+    // only username
     const encodedUsername = encodeURIComponent(credentials);
     return protocol + encodedUsername + '@' + hostPart;
   } else {
@@ -243,10 +242,17 @@ function fixProxyUrl(proxyUrl) {
   }
 }
 
+/**
+ * getProxyAuthHeaders:
+ *  - uses fixProxyUrl to ensure protocol & encode credentials
+ *  - if there's username/password, returns { "Proxy-Authorization": "Basic ..."}
+ *  - else returns {}
+ */
 function getProxyAuthHeaders(proxyUrl) {
   try {
     const fixedUrl = fixProxyUrl(proxyUrl);
     const parsed = new URL(fixedUrl);
+
     if (parsed.username || parsed.password) {
       const credentials = Buffer.from(`${parsed.username}:${parsed.password}`).toString('base64');
       return { 'Proxy-Authorization': `Basic ${credentials}` };
@@ -258,7 +264,7 @@ function getProxyAuthHeaders(proxyUrl) {
 }
 
 // ------------------------------------
-// Initialisierung beim Laden
+// Initialization
 // ------------------------------------
 loadProxies();
 loadProxyStats();
