@@ -1,51 +1,82 @@
+// core/login_handler.js
 const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
 const { setTimeoutPromise } = require('../utils/helpers');
 
 /**
  * performLogin:
- * - Searches the URL for an "ory_ac_..." code.
- * - Checks after the login click if a 418 (Account banned) response is received.
- * - As soon as either the code is found or a 418-status is detected, the flow is aborted.
- * - If no code is found, checks the final page text for known error messages (e.g., invalid credentials).
+ * - Searches the URL for an "ory_ac_..." code in responses.
+ * - Tracks if any response had 418 => bannedStatus = true
+ * - Tracks if any response had 403 or "Incapsula" text => impervaBlocked = true
+ * - After the login click (and potential consent flow), checks the final page text for known errors.
+ * - Only at the end do we decide which error code or success value to return.
  *
  * @param {Object} page - Puppeteer Page instance
  * @param {string} username - Login username
  * @param {string} password - Login password
  * @param {string} [uniqueSessionId] - Optional unique session ID (auto-generated if not provided)
- * @returns {Promise<string|false>} - Returns the code (string), "ACCOUNT_BANNED", "INVALID_CREDENTIALS", "ACCOUNT_DISABLED", etc., or false if unknown errors
+ * @returns {Promise<string|false>} - Possible returns:
+ *    - ory-code (string) on success
+ *    - "ACCOUNT_BANNED" if 418 or final page indicates ban
+ *    - "IP_BLOCKED" if 403 or Incapsula triggers
+ *    - "INVALID_CREDENTIALS", "ACCOUNT_DISABLED", etc. if final page has known error strings
+ *    - false if unknown error
  */
 async function performLogin(page, username, password, uniqueSessionId = uuidv4()) {
-  let foundCode = null;      // Stores the ory-code once found
-  let bannedStatus = false;  // Set to true if a 418 response is detected
+  let foundCode = null;        // If we find an "ory_ac_..." code in any response URL
+  let bannedStatus = false;    // Set to true if any response returns 418
+  let impervaBlocked = false;  // Set to true if any response returns 403 or "Incapsula"
 
-  // Regex to extract the "ory_ac_..." code
   const oryRegex = /ory_ac_[^&#]+/i;
 
-  // Response listener to detect the ory-code or 418 (banned) status
-  function responseListener(response) {
+  /**
+   * Response listener to set flags based on HTTP status code or "Incapsula" text
+   * Also extracts ory-code if found in the response URL
+   */
+  async function responseListener(response) {
     try {
-      if (response.status() === 418) {
+      const status = response.status();
+
+      // 418 => "ACCOUNT_BANNED"
+      if (status === 418) {
         bannedStatus = true;
-        logger.warn(`[${uniqueSessionId}] Received response with status 418 (Account banned)`);
+        logger.warn(`[${uniqueSessionId}] Response status 418 => account banned`);
       }
+
+      // 403 => Possibly Imperva or IP block
+      if (status === 403) {
+        impervaBlocked = true;
+        logger.warn(`[${uniqueSessionId}] Response status 403 => possible Captcha Imperva/IP block`);
+      }
+
+      // Optionally read response text to detect "Incapsula"
+      try {
+        const body = await response.text();
+        if (body.includes("Incapsula") || body.includes("Request unsuccessful. Incapsula")) {
+          impervaBlocked = true;
+          logger.warn(`[${uniqueSessionId}] Incapsula text found => IP block/Imperva detection`);
+        }
+      } catch (readErr) {
+        logger.warn(`[${uniqueSessionId}] Could not read response text: ${readErr.message}`);
+      }
+
+      // If no code found yet, try extracting from the response URL
       if (!foundCode) {
-        const url = response.url();
-        const match = oryRegex.exec(url);
+        const match = oryRegex.exec(response.url());
         if (match) {
           foundCode = match[0];
           logger.info(`[${uniqueSessionId}] Found ory-code => ${foundCode}`);
         }
       }
     } catch (err) {
-      logger.warn(`[${uniqueSessionId}] Error in response listener: ${err.message}`);
+      logger.warn(`[${uniqueSessionId}] Error in responseListener: ${err.message}`);
     }
   }
 
   // Attach the response listener
   page.on('response', responseListener);
 
-  // Global timeout (90 seconds)
+  // Set a global timeout (90 seconds)
   let timeoutHandle;
   const globalTimeout = 90000;
   const timeoutPromise = new Promise((_, reject) => {
@@ -54,7 +85,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
     }, globalTimeout);
   });
 
-  // Main login process
+  // The main login flow
   const loginProcess = (async () => {
     logger.debug(`[${uniqueSessionId}] Waiting for username field`);
     await page.waitForSelector('input#email', { timeout: 10000 });
@@ -66,99 +97,120 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
     await page.focus('input#password');
     await page.keyboard.type(password);
 
-    logger.debug(`[${uniqueSessionId}] Waiting 1 second after entering credentials`);
+    logger.debug(`[${uniqueSessionId}] Waiting 1 second after credentials`);
     await setTimeoutPromise(1000);
 
-    // If the code was already found before the click
+    // If we already have an ory-code before clicking (rare, but let's check)
     if (foundCode) {
-      logger.info(`[${uniqueSessionId}] Code found before login click => success`);
-      return foundCode;
+      logger.info(`[${uniqueSessionId}] ory-code found before login click => success`);
+    } else {
+      // Click the login button
+      const loginButtonSelector = '#accept';
+      logger.debug(`[${uniqueSessionId}] Waiting for login button`);
+      await page.waitForSelector(loginButtonSelector, { timeout: 6000, visible: true });
+      logger.debug(`[${uniqueSessionId}] Clicking login button`);
+      await page.click(loginButtonSelector, { delay: 100 });
+
+      // Wait a bit after clicking
+      await setTimeoutPromise(1000);
+
+      logger.info(`[${uniqueSessionId}] URL after login click: ${page.url()}`);
+
+      // If there's a consent page, handle it
+      if (page.url().includes("consent")) {
+        logger.info(`[${uniqueSessionId}] Consent page detected`);
+        try {
+          await page.waitForSelector(loginButtonSelector, { timeout: 10000, visible: true });
+          logger.debug(`[${uniqueSessionId}] Clicking allow on consent page`);
+          await page.click(loginButtonSelector, { delay: 100 });
+          await page.waitForNavigation({ timeout: 30000 });
+        } catch (err) {
+          logger.warn(`[${uniqueSessionId}] Consent allow step error: ${err.message}`);
+        }
+      }
+
+      // Another brief wait
+      await setTimeoutPromise(1000);
     }
 
-    const loginButtonSelector = '#accept';
-    logger.debug(`[${uniqueSessionId}] Waiting for login button`);
-    await page.waitForSelector(loginButtonSelector, { timeout: 6000, visible: true });
-    logger.debug(`[${uniqueSessionId}] Clicking login button`);
-    await page.click(loginButtonSelector, { delay: 100 });
+    // Now we do our final checks all together, so we don't abort early.
 
-    // Small wait so that the click is processed
-    await setTimeoutPromise(1000);
+    // If an ory-code was found by any response
+    if (foundCode) {
+      logger.info(`[${uniqueSessionId}] ory-code found => ${foundCode}`);
+    }
 
-    // Check if a 418 response was received
+    // Log the final URL
+    const finalUrl = page.url();
+    logger.info(`[${uniqueSessionId}] Final URL: ${finalUrl}`);
+
+    // If we still haven't found a code, try the final URL
+    if (!foundCode) {
+      const finalMatch = oryRegex.exec(finalUrl);
+      if (finalMatch) {
+        foundCode = finalMatch[0];
+        logger.info(`[${uniqueSessionId}] Found ory-code in final URL => ${foundCode}`);
+      }
+    }
+
+    // If we STILL don't have a code, let's do the final page content check
+    let finalPageContent = "";
+    if (!foundCode) {
+      logger.warn(`[${uniqueSessionId}] No code found => checking page content`);
+      try {
+        finalPageContent = await page.content();
+      } catch (readErr) {
+        logger.warn(`[${uniqueSessionId}] Could not read final page content: ${readErr.message}`);
+      }
+    }
+
+    // *** NOW decide what to return, in order of priority ***
+
+    // 1) IP_BLOCKED?
+    if (impervaBlocked) {
+      logger.warn(`[${uniqueSessionId}] IP block / Imperva detected => "IP_BLOCKED"`);
+      return "IP_BLOCKED";
+    }
+
+    // 2) BANNED?
+    // either from 418 or if final page content indicates ban
     if (bannedStatus) {
-      logger.warn(`[${uniqueSessionId}] Aborting further actions due to 418 status`);
+      logger.warn(`[${uniqueSessionId}] 418 => "ACCOUNT_BANNED"`);
+      return "ACCOUNT_BANNED";
+    }
+    if (finalPageContent.includes("We are unable to log you in to this account. Please contact Customer Service")) {
+      logger.error(`[${uniqueSessionId}] Final page indicates banned => "ACCOUNT_BANNED"`);
       return "ACCOUNT_BANNED";
     }
 
-    // Check if the ory-code became available right after the click
+    // 3) INVALID_CREDENTIALS or ACCOUNT_DISABLED?
+    if (finalPageContent.includes("Your username or password is incorrect.")) {
+      logger.warn(`[${uniqueSessionId}] Final page => "INVALID_CREDENTIALS"`);
+      return "INVALID_CREDENTIALS";
+    }
+    if (finalPageContent.includes("your account has been disabled for")) {
+      logger.error(`[${uniqueSessionId}] Final page => "ACCOUNT_DISABLED"`);
+      return "ACCOUNT_DISABLED";
+    }
+
+    // 4) Incapsula in final page? (Just in case)
+    if (finalPageContent.includes("Incapsula") || finalPageContent.includes("Request unsuccessful. Incapsula")) {
+      logger.warn(`[${uniqueSessionId}] Final page => Incapsula => "IP_BLOCKED"`);
+      return "IP_BLOCKED";
+    }
+
+    // 5) If foundCode is set, return it
     if (foundCode) {
-      logger.info(`[${uniqueSessionId}] Code found immediately after login click => success`);
+      logger.info(`[${uniqueSessionId}] Returning code => ${foundCode}`);
       return foundCode;
     }
 
-    let currentUrl = page.url();
-    logger.info(`[${uniqueSessionId}] URL after login click: ${currentUrl}`);
-
-    // If a consent page is detected, attempt the Allow flow
-    if (currentUrl.includes("consent") && !foundCode && !bannedStatus) {
-      logger.info(`[${uniqueSessionId}] Consent page detected. Processing allow step.`);
-      try {
-        logger.debug(`[${uniqueSessionId}] Waiting for allow button on consent page`);
-        await page.waitForSelector(loginButtonSelector, { timeout: 10000, visible: true });
-        logger.debug(`[${uniqueSessionId}] Clicking allow button on consent page`);
-        await page.click(loginButtonSelector, { delay: 100 });
-        await page.waitForNavigation({ timeout: 30000 });
-      } catch (allowErr) {
-        logger.warn(`[${uniqueSessionId}] Error during consent allow step: ${allowErr.message}`);
-      }
-    }
-
-    // After potential consent flow
-    await setTimeoutPromise(1000);
-    if (foundCode) {
-      logger.info(`[${uniqueSessionId}] Code found after consent allow => success`);
-      return foundCode;
-    }
-
-    currentUrl = page.url();
-    logger.info(`[${uniqueSessionId}] Final URL: ${currentUrl}`);
-
-    // Check the final URL for the ory-code
-    const finalMatch = oryRegex.exec(currentUrl);
-    if (finalMatch) {
-      logger.info(`[${uniqueSessionId}] Found ory-code in final URL => ${finalMatch[0]}`);
-      return finalMatch[0];
-    }
-
-    logger.warn(`[${uniqueSessionId}] No code found => login failed`);
-
-    // --- ADDITIONAL ERROR MESSAGE CHECKS ---
-    // We read the page's HTML content to see if known error messages are displayed.
-    try {
-      const finalPageContent = await page.content();
-
-      // Example known error messages:
-      if (finalPageContent.includes("Your username or password is incorrect.")) {
-        logger.warn(`[${uniqueSessionId}] Incorrect credentials => 400`);
-        return "INVALID_CREDENTIALS";
-      }
-      if (finalPageContent.includes("your account has been disabled for")) {
-        logger.error(`[${uniqueSessionId}] Account is temporarily disabled => 400`);
-        return "ACCOUNT_DISABLED";
-      }
-      if (finalPageContent.includes("We are unable to log you in to this account. Please contact Customer Service")) {
-        logger.error(`[${uniqueSessionId}] Possibly banned or locked => "ACCOUNT_BANNED"`);
-        return "ACCOUNT_BANNED";
-      }
-      // You can add additional checks for other specific error messages if needed.
-    } catch (contentErr) {
-      logger.warn(`[${uniqueSessionId}] Error reading final page content: ${contentErr.message}`);
-    }
-
-    // If no known error text was found, return false
+    // 6) If none of the above matched, return false
+    logger.warn(`[${uniqueSessionId}] No recognized error or code => login failed (false)`);
     return false;
   })();
 
+  // Wrap with the global timeout
   try {
     const result = await Promise.race([loginProcess, timeoutPromise]);
     clearTimeout(timeoutHandle);
@@ -167,7 +219,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
     logger.error(`[${uniqueSessionId}] Global login error: ${error.message}`);
     return false;
   } finally {
-    // Remove the listener to avoid memory leaks
+    // Detach the listener to avoid memory leaks
     page.off('response', responseListener);
   }
 }
