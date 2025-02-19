@@ -14,7 +14,7 @@ let isBusy = false;
 router.post('/', async (req, res) => {
   // 1. Check if a request is already in progress
   if (isBusy) {
-    // Reject request (e.g., 503 - Service Unavailable)
+    // Reject the request (e.g., 503 - Service Unavailable)
     logger.warn('Another login request is already in progress, rejecting new request.');
     return res.status(503).json({
       status: AuthResponseStatus.ERROR,
@@ -27,10 +27,20 @@ router.post('/', async (req, res) => {
 
   const startTime = Date.now();
   const requestId = uuidv4();
+  let proxy; // declared here so it is accessible in the finish listener
+
   logger.info(`Received login request - Request ID: ${requestId}`);
 
   try {
     const { url, username, password } = req.body;
+
+    // Attach a finish event listener to log final details (including actual HTTP status code)
+    res.on('finish', () => {
+      // Extract dragoName from the User-Agent header (e.g., "Dragonite/1.13.3-testing (Level) Git/04e1203)")
+      const dragoName = req.headers['user-agent'] || 'unknown';
+      logger.info(`Request processed in ${(Date.now() - startTime) / 1000}s for ${username || 'unknown'} using ${proxy || 'none'} result ${res.statusCode}. Request by ${dragoName}`);
+    });
+
     const required = ["url", "username", "password"];
     if (!required.every(key => req.body[key])) {
       logger.error(`[Request ID: ${requestId}] Missing required parameters`);
@@ -41,7 +51,6 @@ router.post('/', async (req, res) => {
     }
 
     // 1. Retrieve a proxy from the pool
-    let proxy;
     try {
       proxy = getNextProxy();
       logger.info(`[Request ID: ${requestId}] Using proxy: ${proxy}`);
@@ -66,18 +75,12 @@ router.post('/', async (req, res) => {
     logger.info(`[Request ID: ${requestId}] Starting first login attempt...`);
     const result = await loginWithRetry(url, username, password, proxy);
 
-    // Log detailed info about the request processing:
-    // Extract dragoName from the User-Agent header (e.g., "Dragonite/1.13.0 (dragoDE) Git/9529336)")
-    const dragoName = req.headers['user-agent'] || 'unknown';
-    // Log with processing time, account, proxy, and HTTP response status code.
-    logger.info(`Request from ${dragoName} processed in ${(Date.now() - startTime) / 1000}s for ${username} using ${proxy} result ${res.statusCode}`);
-
     // Error handling
     if (result.error) {
       if (result.error === "IP_BLOCKED") {
-        logger.warn(`[Request ID: ${requestId}] IP blocked => waiting 60s => no response`);
-        await new Promise(resolve => setTimeout(resolve, 60000));
-        logger.warn(`[Request ID: ${requestId}] 60s over => returning silently`);
+        //logger.warn(`[Request ID: ${requestId}] IP blocked => waiting 60s => no response`);
+        //await new Promise(resolve => setTimeout(resolve, 60000));
+       // logger.warn(`[Request ID: ${requestId}] 60s over => returning silently`);
         return;
       }
       if (["ACCOUNT_BANNED", "IMPERVA_BLOCKED"].includes(result.error)) {
