@@ -9,8 +9,8 @@ const axios = require('axios');
  */
 async function isProxyWorking(proxyUrl, timeout = 5000) {
   try {
-    // Use a simple GET to a known endpoint (e.g., ipify)
-    const response = await axios.get('https://api.ipify.org?format=json', {
+    // Use a simple GET to a known endpoint (e.g., ipify) with HTTP protocol
+    const response = await axios.get('http://api.ipify.org?format=json', {
       proxy: new URL(proxyUrl),
       timeout,
     });
