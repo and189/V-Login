@@ -78,9 +78,9 @@ router.post('/', async (req, res) => {
     // Error handling
     if (result.error) {
       if (result.error === "IP_BLOCKED") {
-        logger.warn(`[Request ID: ${requestId}] IP blocked => waiting 60s => no response`);
-        await new Promise(resolve => setTimeout(resolve, 60000));
-        logger.warn(`[Request ID: ${requestId}] 60s over => returning silently`);
+        //logger.warn(`[Request ID: ${requestId}] IP blocked => waiting 60s => no response`);
+        //await new Promise(resolve => setTimeout(resolve, 60000));
+       // logger.warn(`[Request ID: ${requestId}] 60s over => returning silently`);
         return;
       }
       if (["ACCOUNT_BANNED", "IMPERVA_BLOCKED"].includes(result.error)) {
