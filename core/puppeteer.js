@@ -11,52 +11,102 @@ const { IMPERVA_CHECK_TEXT } = require('../config/constants');
 const { performLogin } = require('./login_handler');
 const { isIpBanned } = require('../utils/ipUtils');
 
+// External dependencies for sending Discord webhook messages
+const axios = require('axios');
+const FormData = require('form-data');
+
 /**
- * Function: initBrowser
+ * Helper function to send a screenshot along with a message to a Discord webhook.
+ * The webhook URL is read from process.env.DISCORD_WEBHOOK.
  *
- * Purpose:
- *   Connects to an existing Puppeteer browser instance via a provided WebSocket endpoint,
- *   creates a new page with a randomized viewport, and applies anti-detection modifications.
+ * @param {string} message - The message to send.
+ * @param {Buffer} screenshotBuffer - The screenshot image buffer.
+ */
+async function sendDiscordScreenshot(message, screenshotBuffer) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK;
+  if (!webhookUrl) {
+    logger.warn("No Discord webhook URL configured in .env");
+    return;
+  }
+  const form = new FormData();
+  form.append('content', message);
+  form.append('file', screenshotBuffer, {
+    filename: 'screenshot.png',
+    contentType: 'image/png'
+  });
+  try {
+    await axios.post(webhookUrl, form, { headers: form.getHeaders() });
+    logger.info("Screenshot sent to Discord webhook");
+  } catch (err) {
+    logger.error("Failed to send screenshot to Discord: " + err.message);
+  }
+}
+
+/**
+ * Helper function to wait for a given time.
+ * Uses page.waitForTimeout if available, otherwise page.waitFor, else falls back to setTimeout.
  *
- * Parameters:
- *   - wsEndpoint (string): The WebSocket endpoint for connecting to the browser.
+ * @param {object} page - The Puppeteer page instance.
+ * @param {number} ms - Milliseconds to wait.
+ */
+async function waitFor(page, ms) {
+  if (page.waitForTimeout) {
+    await page.waitForTimeout(ms);
+  } else if (page.waitFor) {
+    await page.waitFor(ms);
+  } else {
+    await new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+
+/**
+ * Helper function to capture a screenshot from the page and send it to Discord.
  *
- * Returns:
- *   - An object containing:
- *       { browser, page }
+ * @param {object} page - The Puppeteer page instance.
+ * @param {string} message - The message to include with the screenshot.
+ */
+async function captureAndSendScreenshot(page, message) {
+  if (page) {
+    try {
+      // Wait 3 seconds before taking the screenshot.
+      await waitFor(page, 3000);
+      // Optional: try waiting for the 'body' selector, but don't fail if it times out.
+      try {
+        await page.waitForSelector('body', { timeout: 5000 });
+      } catch (e) {
+        logger.warn("Waiting for selector 'body' failed, proceeding with screenshot: " + e.message);
+      }
+      // Capture the screenshot without an encoding option, so a Buffer is returned.
+      let screenshotBuffer = await page.screenshot();
+      if (!Buffer.isBuffer(screenshotBuffer)) {
+        screenshotBuffer = Buffer.from(screenshotBuffer, 'binary');
+      }
+      await sendDiscordScreenshot(message, screenshotBuffer);
+    } catch (err) {
+      logger.error("Failed to capture screenshot: " + err.message);
+    }
+  }
+}
+
+/**
+ * Initializes the browser by connecting to a Puppeteer WebSocket endpoint.
+ * Sets up a new page, randomizes viewport, and applies anti-detection measures.
  *
- * Process:
- *   1. Logs the attempt to connect to the browser.
- *   2. Uses puppeteer.connect to establish a connection with the given WebSocket endpoint.
- *   3. Waits for a brief moment to ensure connection stability.
- *   4. Opens a new page.
- *   5. Randomizes the viewport dimensions to mimic natural user behavior.
- *   6. Sets the new viewport dimensions for the page.
- *   7. Calls bypassPuppeteerDetection to modify page properties and avoid bot detection.
- *   8. Returns the browser and page objects.
- *
- * Error Handling:
- *   - Logs and rethrows any errors encountered during the process.
+ * @param {string} wsEndpoint - The WebSocket endpoint for connecting to the browser
+ * @returns {Promise<{ browser: object, page: object }>}
  */
 async function initBrowser(wsEndpoint) {
   logger.debug(`Connecting to browser via WebSocket endpoint: ${wsEndpoint}`);
   let browser = null;
   try {
-    // Connect to the browser instance using the provided WebSocket endpoint.
     browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
-    // Wait for 1 second to ensure the connection is stable.
     await new Promise(resolve => setTimeout(resolve, 1000));
-    // Create a new page in the browser.
     const page = await browser.newPage();
-    // Generate random viewport dimensions for width and height.
     const viewportWidth = 1200 + Math.floor(Math.random() * 200);
     const viewportHeight = 700 + Math.floor(Math.random() * 100);
     logger.debug(`Setting viewport to width: ${viewportWidth}, height: ${viewportHeight}`);
-    // Set the viewport for the new page.
     await page.setViewport({ width: viewportWidth, height: viewportHeight });
-    // Apply modifications to bypass Puppeteer detection mechanisms.
     await bypassPuppeteerDetection(page);
-    // Return the connected browser and the initialized page.
     return { browser, page };
   } catch (error) {
     logger.error(`Error initializing browser: ${error.message}`);
@@ -65,58 +115,34 @@ async function initBrowser(wsEndpoint) {
 }
 
 /**
- * Function: runPuppeteer
+ * Orchestrates a Puppeteer session to:
+ *   - Connect to the browser,
+ *   - Check IP ban status,
+ *   - Navigate to the login URL (max 5s timeout),
+ *   - Check for Imperva ban text,
+ *   - Perform login,
+ *   - Return ory-code or error codes accordingly,
+ *   - Capture screenshots on errors,
+ *   - Close browser on completion.
  *
- * Purpose:
- *   Orchestrates a complete Puppeteer session including:
- *   - Browser connection,
- *   - Public IP verification,
- *   - Navigation to the authentication URL,
- *   - Detection of IP blocking,
- *   - Performing login,
- *   - And handling any errors during the process.
- *
- * Parameters:
- *   - initialAuthUrl (string): The URL for the initial authentication.
- *   - username (string): The username used for login.
- *   - password (string): The password used for login.
- *   - wsEndpoint (string): The WebSocket endpoint for connecting to the browser.
- *
- * Returns:
- *   - An object with either:
- *       { token: <authentication token> } on successful login,
- *       or { error: <error code> } if an error occurs.
- *
- * Process:
- *   1. Generates a unique session ID for logging and tracking.
- *   2. Initializes the browser and page using initBrowser.
- *   3. Retrieves the public IP address from the browser context.
- *   4. Checks if the IP is banned; if banned, returns an "IP_BLOCKED" error.
- *   5. Navigates to the authentication URL and waits until the network is idle.
- *   6. Checks the page content for specific text indicating IP blocking (e.g., Imperva).
- *   7. Performs the login using performLogin with the provided credentials.
- *   8. Interprets the login result:
- *        - Returns an error if known issues occur (IP blocked, account banned, etc.).
- *        - Returns a token if a valid authentication token is received.
- *   9. Closes the browser in a finally block to ensure cleanup.
- *
- * Error Handling:
- *   - Logs and returns specific error codes for different failure scenarios.
+ * @param {string} initialAuthUrl - The URL for initial authentication
+ * @param {string} username - The username used for login
+ * @param {string} password - The password used for login
+ * @param {string} wsEndpoint - The WebSocket endpoint for connecting to the browser
+ * @returns {Promise<{ token?: string, error?: string, description?: string }>}
  */
 async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
   let browser = null;
   let page = null;
-  // Generate a unique session ID to track this Puppeteer session.
   const uniqueSessionId = uuidv4();
 
   try {
     logger.info(`Starting Puppeteer session - Session ID: ${uniqueSessionId}`);
-    // Initialize the browser and page.
     const { browser: br, page: pg } = await initBrowser(wsEndpoint);
     browser = br;
     page = pg;
 
-    // Retrieve the public IP address from the browser context.
+    // 1) Check the public IP from within the browser
     const browserIp = await page.evaluate(async () => {
       try {
         const res = await fetch('https://api.ipify.org?format=json');
@@ -127,47 +153,80 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
       }
     });
     logger.info(`Public IP (browser-side): ${browserIp}`);
-    // Check if the obtained IP is banned.
+
+    // 2) Check if the IP is banned (custom logic from isIpBanned)
     if (browserIp && await isIpBanned(browserIp)) {
-      logger.error(`Browser IP ${browserIp} is banned.`);
+      const msg = `Browser IP ${browserIp} is banned for session ${uniqueSessionId}`;
+      logger.error(msg);
+      await captureAndSendScreenshot(page, msg);
       return { error: "IP_BLOCKED" };
     }
 
-    // Navigate to the authentication URL.
+    // 3) Attempt navigation with a 5-second timeout
     logger.debug(`Navigating to ${initialAuthUrl} - Session ID: ${uniqueSessionId}`);
-    await page.goto(initialAuthUrl, { waitUntil: 'networkidle2' });
+    try {
+      await page.goto(initialAuthUrl, {
+        waitUntil: 'networkidle2',
+        timeout: 5000 // 5 seconds max
+      });
+    } catch (err) {
+      // If navigation doesn't complete in 5s, we abort here
+      const msg = `Navigation failed or timed out after 5 seconds: ${err.message}`;
+      logger.warn(`[${uniqueSessionId}] ${msg}`);
+      await captureAndSendScreenshot(page, msg);
+
+      // Return "NAVIGATION_TIMEOUT" so the caller can switch proxies or handle differently
+      return { error: "NAVIGATION_TIMEOUT" };
+    }
+
     logger.debug(`Navigation completed to ${page.url()} - Session ID: ${uniqueSessionId}`);
 
-    // Verify if the page content includes text that indicates an IP block by Imperva.
+    // 4) Check if Imperva blocking text is present
     const pageSource = await page.content();
     if (pageSource.includes(IMPERVA_CHECK_TEXT)) {
-      logger.error(`IP ban triggered by Imperva for Session ID: ${uniqueSessionId}`);
+      const msg = `Imperva triggered IP ban for session ${uniqueSessionId}`;
+      logger.error(msg);
+      await captureAndSendScreenshot(page, msg);
       return { error: "IP_BLOCKED" };
     }
 
-    // Attempt to log in using the provided username and password.
+    // 5) Perform the actual login
     const loginResult = await performLogin(page, username, password, uniqueSessionId);
-    // Check if the login process returned known error codes.
+
+    // 6) Handle known return values from performLogin
     if (loginResult === "IP_BLOCKED") {
-      logger.warn(`[${uniqueSessionId}] IP blocked detected during login`);
+      const msg = `Login attempt resulted in IP_BLOCKED for session ${uniqueSessionId}`;
+      logger.warn(msg);
+      await captureAndSendScreenshot(page, msg);
       return { error: "IP_BLOCKED" };
     } else if (loginResult === "ACCOUNT_BANNED") {
       logger.warn(`[${uniqueSessionId}] Account banned detected during login`);
       return { error: "ACCOUNT_BANNED" };
+    } else if (loginResult === "INVALID_CREDENTIALS") {
+      logger.warn(`[${uniqueSessionId}] Invalid credentials detected => 400`);
+      return { error: "INVALID_CREDENTIALS" };
+    } else if (loginResult === "ACCOUNT_DISABLED") {
+      logger.warn(`[${uniqueSessionId}] Account temporarily disabled => 400`);
+      return { error: "ACCOUNT_DISABLED" };
     } else if (typeof loginResult === "string") {
-      // If the result is a string, interpret it as a valid authentication token.
+      // If it's a valid ory_ac_ code
       logger.info(`[${uniqueSessionId}] Final code => ${loginResult}`);
       return { token: loginResult };
     } else {
+      // loginResult was false or an unknown result
       logger.warn(`[${uniqueSessionId}] Login failed`);
       return { error: "LOGIN_FAILED" };
     }
   } catch (error) {
-    // Log any critical errors encountered during the session.
-    logger.error(`Critical error in session ${uniqueSessionId}: ${error.message}`);
+    // 7) Catch any critical or unexpected errors
+    const msg = `Critical error in session ${uniqueSessionId}: ${error.message}`;
+    logger.error(msg);
+    if (page) {
+      await captureAndSendScreenshot(page, msg);
+    }
     return { error: "CRITICAL_ERROR", description: error.message };
   } finally {
-    // Ensure the browser is closed to free resources.
+    // 8) Clean up: close the browser
     if (browser) {
       logger.debug(`Closing browser - Session ID: ${uniqueSessionId}`);
       try {
@@ -180,32 +239,14 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
 }
 
 /**
- * Function: launchAndConnectToBrowser
+ * Simplified entry point that configures and launches a browser instance with (optionally) a proxy.
+ * Then connects to it via WebSocket and performs the login flow with runPuppeteer.
  *
- * Purpose:
- *   Prepares the configuration for launching a new browser instance with potential proxy settings,
- *   constructs the WebSocket endpoint, and initiates a Puppeteer session by calling runPuppeteer.
- *
- * Parameters:
- *   - initialAuthUrl (string): The URL to navigate to for authentication.
- *   - username (string): The username for login.
- *   - password (string): The password for login.
- *   - proxyIndicator (string): A provided proxy address. If non-empty, it is used; otherwise, a proxy is chosen from a proxy pool.
- *
- * Returns:
- *   - The result from runPuppeteer, which includes either an authentication token or an error code.
- *
- * Process:
- *   1. Defines the host where the browser instance will be launched.
- *   2. Constructs a configuration object with various browser settings including:
- *        - Profile name, platform, kernel type, and incognito mode.
- *        - Fingerprint settings such as timezone, screen dimensions, and user agent.
- *        - Additional arguments like proxy bypass rules.
- *   3. Determines which proxy to use:
- *        - Uses the provided proxy if available,
- *        - Otherwise, attempts to retrieve one from the proxy pool.
- *   4. Constructs the browser's WebSocket endpoint using the host and encoded configuration.
- *   5. Logs the WebSocket endpoint and calls runPuppeteer to start the session.
+ * @param {string} initialAuthUrl - The URL to navigate to for authentication
+ * @param {string} username - The username for login
+ * @param {string} password - The password for login
+ * @param {string} proxyIndicator - Proxy string (if provided, it is used; otherwise fallback to a proxy pool)
+ * @returns {Promise<{ token?: string, error?: string, description?: string }>}
  */
 async function launchAndConnectToBrowser(initialAuthUrl, username, password, proxyIndicator) {
   const host = 'browserless:8848';
@@ -217,31 +258,53 @@ async function launchAndConnectToBrowser(initialAuthUrl, username, password, pro
     timedCloseSec: 60,
     kernelMilestone: '130',
     skipProxyChecking: true,
-    //autoClose: true,
     clearCacheOnClose: true,
   };
 
-  // Determine whether to use a provided proxy or fetch one from the proxy pool.
-  if (proxyIndicator && proxyIndicator.trim().length > 0) {
+  const { isProxyWorking } = require('../utils/proxyCheck');
+
+  // If a proxy string is provided, test it first
+  if (typeof proxyIndicator === 'string' && proxyIndicator.trim().length > 0) {
+    const working = await isProxyWorking(proxyIndicator);
+    if (!working) {
+      throw new Error(`Provided proxy ${proxyIndicator} is not working`);
+    }
     config.proxy = proxyIndicator;
     logger.debug(`Using provided proxy: ${proxyIndicator}`);
   } else {
+    // Otherwise, pick a proxy from the pool
     const { getNextProxy } = require('../utils/proxyPool');
-    const selectedProxy = getNextProxy();
-    if (selectedProxy) {
+    let selectedProxy = null;
+    let working = false;
+    const maxAttempts = 5;
+    let attempt = 0;
+    while (!working && attempt < maxAttempts) {
+      selectedProxy = await getNextProxy();
+      if (!selectedProxy) {
+        break;
+      }
+      working = await isProxyWorking(selectedProxy);
+      if (!working) {
+        logger.warn(`Proxy ${selectedProxy} failed health check, trying next proxy.`);
+      }
+      attempt++;
+    }
+    if (working && typeof selectedProxy === 'string') {
       config.proxy = selectedProxy;
       logger.debug(`Using proxy from proxyPool: ${selectedProxy}`);
     } else {
-      logger.debug('No available proxies; using local IP');
+      logger.debug('No working proxies found; using local IP');
     }
   }
 
-  // Construct the WebSocket endpoint URL with the encoded configuration.
   const browserWSEndpoint = `ws://${host}/devtool/launch?config=${encodeURIComponent(JSON.stringify(config))}`;
   logger.debug(`Browser WS Endpoint: ${browserWSEndpoint}`);
 
-  // Initiate the Puppeteer session using the constructed WebSocket endpoint.
+  // Call runPuppeteer with the selected or local IP
   return await runPuppeteer(initialAuthUrl, username, password, browserWSEndpoint);
 }
 
-module.exports = { runPuppeteer, launchAndConnectToBrowser };
+module.exports = {
+  runPuppeteer,
+  launchAndConnectToBrowser
+};
