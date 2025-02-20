@@ -87,6 +87,18 @@ async function captureAndSendScreenshot(page, message) {
 }
 
 /**
+ * Überprüft, ob die Seite einen Captcha-/Bann-Hinweis anzeigt.
+ *
+ * @param {object} page - Die Puppeteer-Seite.
+ * @returns {Promise<boolean>}
+ */
+async function checkForCaptchaBan(page) {
+  await waitFor(page, 3000);
+  const content = await page.content();
+  return content.includes("Additional security check is required");
+}
+
+/**
  * Initialisiert den Browser über einen WebSocket-Endpunkt, richtet eine neue Seite ein,
  * setzt (falls vorhanden) den Cookie-Cache und wendet Anti-Erkennungsmethoden an.
  *
@@ -117,6 +129,7 @@ async function initBrowser(wsEndpoint) {
  * Führt eine komplette Puppeteer-Session aus:
  *   - Verbindet sich mit dem Browser,
  *   - Prüft auf IP-Ban,
+ *   - Prüft vorab auf einen Captcha-/Bann-Hinweis und bricht ab, wenn einer gefunden wird,
  *   - Navigiert zur Login-URL,
  *   - Falls die Navigation fehlschlägt (z.B. wegen Timeout) und ein Cookie-Cache vorhanden ist,
  *     wird der Vorgang abgebrochen, damit im Retry-Loop ein neuer Proxy gewählt werden kann,
@@ -143,6 +156,14 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
     const { browser: br, page: pg } = await initBrowser(wsEndpoint);
     browser = br;
     page = pg;
+
+    // Prüfe, ob die Seite bereits einen Captcha-/Bann-Hinweis anzeigt, bevor die URL aufgerufen wird
+    if (await checkForCaptchaBan(page)) {
+      const msg = `Captcha ban detected before navigation for session ${uniqueSessionId}`;
+      logger.error(msg);
+      await captureAndSendScreenshot(page, msg);
+      return { error: "CAPTCHA_BANNED", description: msg };
+    }
 
     logger.debug(`Navigating to ${initialAuthUrl} - Session ID: ${uniqueSessionId}`);
     // Setze das Standard-Navigationstiming auf 3 Sekunden
@@ -233,6 +254,8 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
 /**
  * Einstiegspunkt, der den Browser mit (optional) Proxy-Konfiguration startet,
  * sich via WebSocket verbindet und den Login-Prozess durchführt.
+ * Wenn ein Captcha oder IP-Ban festgestellt wird, wird die Session beendet und es
+ * wird ein neuer Proxy aus dem Pool versucht, bis ein erfolgreicher Login erfolgt.
  *
  * @param {string} initialAuthUrl - URL zur Authentifizierung.
  * @param {string} username - Der Login-Benutzername.
@@ -242,60 +265,71 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
  */
 async function launchAndConnectToBrowser(initialAuthUrl, username, password, proxyIndicator) {
   const host = 'browserless:8848';
-  const config = {
-    name: 'V-Login',
-    once: true,
-    platform: 'windows',
-    kernel: 'chromium',
-    disableImageLoading: true,
-    timedCloseSec: 60,
-    kernelMilestone: '130',
-    startupUrls: [initialAuthUrl],
-    skipProxyChecking: true,
-    clearCacheOnClose: true,
-    languages: ["en-US", "en"],
-    args: {
-      "--lang": "en-US"
-    },
-  };
-  const { isProxyWorking } = require('../utils/proxyCheck');
+  const maxAttempts = 5;
+  let attempt = 0;
+  let result = null;
+  while (attempt < maxAttempts) {
+    attempt++;
+    const config = {
+      name: 'V-Login',
+      once: true,
+      platform: 'windows',
+      kernel: 'chromium',
+      disableImageLoading: true,
+      timedCloseSec: 60,
+      kernelMilestone: '130',
+      startupUrls: [initialAuthUrl],
+      skipProxyChecking: true,
+      clearCacheOnClose: true,
+      languages: ["en-US", "en"],
+      args: {
+        "--lang": "en-US"
+      },
+    };
 
-  if (typeof proxyIndicator === 'string' && proxyIndicator.trim().length > 0) {
-    const working = await isProxyWorking(proxyIndicator);
-    if (!working) {
-      throw new Error(`Provided proxy ${proxyIndicator} is not working`);
-    }
-    config.proxy = proxyIndicator;
-    logger.debug(`Using provided proxy: ${proxyIndicator}`);
-  } else {
-    const { getNextProxy } = require('../utils/proxyPool');
-    let selectedProxy = null;
-    let working = false;
-    const maxAttempts = 5;
-    let attempt = 0;
-    while (!working && attempt < maxAttempts) {
-      selectedProxy = await getNextProxy();
-      if (!selectedProxy) {
-        break;
-      }
-      working = await isProxyWorking(selectedProxy);
-      if (!working) {
-        logger.warn(`Proxy ${selectedProxy} failed health check, trying next proxy.`);
-      }
-      attempt++;
-    }
-    if (working && typeof selectedProxy === 'string') {
-      config.proxy = selectedProxy;
-      logger.debug(`Using proxy from proxyPool: ${selectedProxy}`);
+    if (typeof proxyIndicator === 'string' && proxyIndicator.trim().length > 0) {
+      config.proxy = proxyIndicator;
+      logger.debug(`Using provided proxy: ${proxyIndicator}`);
     } else {
-      logger.debug('No working proxies found; using local IP');
+      const { getNextProxy } = require('../utils/proxyPool');
+      let selectedProxy = null;
+      let working = false;
+      const maxProxyAttempts = 5;
+      let proxyAttempt = 0;
+      while (!working && proxyAttempt < maxProxyAttempts) {
+        proxyAttempt++;
+        selectedProxy = await getNextProxy();
+        if (!selectedProxy) {
+          break;
+        }
+        const { isProxyWorking } = require('../utils/proxyCheck');
+        working = await isProxyWorking(selectedProxy);
+        if (!working) {
+          logger.warn(`Proxy ${selectedProxy} failed health check, trying next proxy.`);
+        }
+      }
+      if (working && typeof selectedProxy === 'string') {
+        config.proxy = selectedProxy;
+        logger.debug(`Using proxy from proxyPool: ${selectedProxy}`);
+      } else {
+        logger.debug('No working proxies found; using local IP');
+      }
+    }
+
+    const browserWSEndpoint = `ws://${host}/devtool/launch?config=${encodeURIComponent(JSON.stringify(config))}`;
+    logger.debug(`Browser WS Endpoint: ${browserWSEndpoint}`);
+
+    result = await runPuppeteer(initialAuthUrl, username, password, browserWSEndpoint);
+    if (result.token) {
+      return result;
+    } else if (result.error === "CAPTCHA_BANNED" || result.error === "IP_BLOCKED" || result.error === "TIMEOUT") {
+      logger.warn(`Attempt ${attempt} failed with error ${result.error}. Trying next proxy...`);
+      continue;
+    } else {
+      return result;
     }
   }
-
-  const browserWSEndpoint = `ws://${host}/devtool/launch?config=${encodeURIComponent(JSON.stringify(config))}`;
-  logger.debug(`Browser WS Endpoint: ${browserWSEndpoint}`);
-
-  return await runPuppeteer(initialAuthUrl, username, password, browserWSEndpoint);
+  return result;
 }
 
 module.exports = {
