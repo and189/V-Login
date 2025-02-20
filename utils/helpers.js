@@ -1,6 +1,14 @@
 // utils/helpers.js
-const setTimeoutPromise = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const logger = require('./logger');
+
+const setTimeoutPromise = (ms) => {
+  logger.debug(`setTimeoutPromise: Waiting for ${ms}ms`);
+  return new Promise(resolve => setTimeout(() => {
+    logger.debug(`setTimeoutPromise: Resolved after ${ms}ms`);
+    resolve();
+  }, ms));
+};
 
 module.exports = {
   setTimeoutPromise
-}
+};
