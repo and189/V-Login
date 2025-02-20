@@ -1,4 +1,3 @@
-// api/login.js
 const express = require('express');
 const router = express.Router();
 const { loginWithRetry } = require('../core/login_with_retry');
@@ -8,18 +7,9 @@ const { v4: uuidv4 } = require('uuid');
 const { URLSearchParams } = require('url');
 const { getNextProxy } = require('../utils/proxyPool');
 
-let isBusy = false;
+// Removed isBusy flag
 
 router.post('/', async (req, res) => {
-  if (isBusy) {
-    logger.warn('Another login request is already in progress, rejecting new request.');
-    return res.status(503).json({
-      status: AuthResponseStatus.ERROR,
-      description: "Server is busy, only one login request at a time."
-    });
-  }
-
-  isBusy = true;
   const startTime = Date.now();
   const requestId = uuidv4();
   let proxy;
@@ -114,8 +104,6 @@ router.post('/', async (req, res) => {
       status: AuthResponseStatus.ERROR,
       description: "Internal server error"
     });
-  } finally {
-    isBusy = false;
   }
 });
 
