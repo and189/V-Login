@@ -30,4 +30,4 @@ if (module === require.main) {
     });
 }
 
-module.exports = app; // Exportiere die App für Tests
+module.exports = app;
