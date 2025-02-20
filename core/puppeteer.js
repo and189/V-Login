@@ -101,7 +101,6 @@ async function initBrowser(wsEndpoint) {
     await new Promise(resolve => setTimeout(resolve, 1000));
     const page = await browser.newPage();
 
-
     const viewportWidth = 1200 + Math.floor(Math.random() * 200);
     const viewportHeight = 700 + Math.floor(Math.random() * 100);
     logger.debug(`Setting viewport to width: ${viewportWidth}, height: ${viewportHeight}`);
@@ -119,8 +118,8 @@ async function initBrowser(wsEndpoint) {
  *   - Verbindet sich mit dem Browser,
  *   - Prüft auf IP-Ban,
  *   - Navigiert zur Login-URL,
- *   - Falls die Navigation fehlschlägt und ein Cookie-Cache vorhanden ist,
- *     wird der Cache erneut gesetzt und die URL wird ein zweites Mal aufgerufen,
+ *   - Falls die Navigation fehlschlägt (z.B. wegen Timeout) und ein Cookie-Cache vorhanden ist,
+ *     wird der Vorgang abgebrochen, damit im Retry-Loop ein neuer Proxy gewählt werden kann,
  *   - Prüft auf Imperva-Blockierung,
  *   - Führt den Login durch,
  *   - Speichert (falls noch nicht vorhanden) die Cookies für künftige Logins,
@@ -146,18 +145,29 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
     page = pg;
 
     logger.debug(`Navigating to ${initialAuthUrl} - Session ID: ${uniqueSessionId}`);
-    let navigationSuccess = false;
+    // Setze das Standard-Navigationstiming auf 3 Sekunden
+    page.setDefaultNavigationTimeout(3000);
+
+    // Nutze Promise.race, um entweder den erfolgreichen Abschluss von page.goto oder einen manuellen Timeout zu erhalten
+    const gotoPromise = page.goto(initialAuthUrl, { waitUntil: 'domcontentloaded' });
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Navigation timeout exceeded")), 3000)
+    );
+
     try {
-      await page.goto(initialAuthUrl, {
-        waitUntil: 'networkidle2',
-        timeout: 3000 // max. 10 Sekunden
-      });
-      navigationSuccess = true;
+      await Promise.race([gotoPromise, timeoutPromise]);
     } catch (err) {
-      const msg = `Navigation failed or timed out after 10 seconds: ${err.message}`;
+      const msg = `Navigation timed out after 3 seconds: ${err.message}`;
       logger.warn(`[${uniqueSessionId}] ${msg}`);
+      await captureAndSendScreenshot(page, msg);
+      try {
+        await page.close(); // Direktes Schließen der Seite beim Timeout
+      } catch (e) {
+        logger.error(`Error closing page on timeout: ${e.message}`);
+      }
+      return { error: "TIMEOUT", description: msg };
     }
-    
+
     logger.debug(`Navigation completed to ${page.url()} - Session ID: ${uniqueSessionId}`);
 
     // Falls noch kein Cookie-Cache vorhanden ist, speichere die aktuellen Cookies für die nächsten 5 Accounts
