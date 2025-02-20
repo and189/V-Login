@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
+const logger = require('./logger'); // Verwende den Logger für Debug-Ausgaben
 
 // ------------------------------------
 // Settings
@@ -57,16 +58,18 @@ let proxyStats = {};
 // 1. Load Proxies
 // ------------------------------------
 function loadProxies() {
+  logger.debug(`Loading proxies from ${PROXIES_TXT_FILE}`);
   try {
     const fileContent = fs.readFileSync(PROXIES_TXT_FILE, 'utf8');
-    // Split lines, trim, remove empty lines
+    // Split lines, trim, remove empty lines, and fix each proxy URL
     proxyList = fileContent
       .split('\n')
       .map(line => line.trim())
-      .filter(line => line.length > 0);
-    console.log(`Loaded ${proxyList.length} proxies from proxies.txt`);
+      .filter(line => line.length > 0)
+      .map(proxy => fixProxyUrl(proxy));
+    logger.debug(`Loaded ${proxyList.length} proxies from proxies.txt`);
   } catch (err) {
-    console.error('Error reading proxies.txt:', err);
+    logger.error('Error reading proxies.txt:', err);
     proxyList = [];
   }
 }
@@ -75,24 +78,29 @@ function loadProxies() {
 // 2. Load/Save Stats
 // ------------------------------------
 function loadProxyStats() {
+  logger.debug(`Loading proxy stats from ${PROXY_STATS_FILE}`);
   try {
     if (fs.existsSync(PROXY_STATS_FILE)) {
       const content = fs.readFileSync(PROXY_STATS_FILE, 'utf8');
       proxyStats = JSON.parse(content);
+      logger.debug('Proxy stats loaded successfully');
     } else {
+      logger.debug('No proxy stats file found, starting with empty stats');
       proxyStats = {};
     }
   } catch (err) {
-    console.error('Error loading proxyStats:', err);
+    logger.error('Error loading proxyStats:', err);
     proxyStats = {};
   }
 }
 
 function saveProxyStats() {
+  logger.debug('Saving proxy stats...');
   try {
     fs.writeFileSync(PROXY_STATS_FILE, JSON.stringify(proxyStats, null, 2), 'utf8');
+    logger.debug('Proxy stats saved successfully');
   } catch (err) {
-    console.error('Error saving proxyStats:', err);
+    logger.error('Error saving proxyStats:', err);
   }
 }
 
@@ -106,7 +114,9 @@ function saveProxyStats() {
  *  - immediately locks it for the current cooldown
  */
 function getNextProxy() {
+  logger.debug('getNextProxy: Attempting to choose an unlocked proxy');
   if (proxyList.length === 0) {
+    logger.warn('getNextProxy: Proxy list is empty');
     return null;
   }
 
@@ -119,17 +129,19 @@ function getNextProxy() {
   });
 
   if (unlockedProxies.length === 0) {
-    // none available
+    logger.warn('getNextProxy: No unlocked proxies available at the moment');
     return null;
   }
 
   // pick one at random
   const chosenProxy = unlockedProxies[Math.floor(Math.random() * unlockedProxies.length)];
+  logger.debug(`getNextProxy: Chosen proxy: ${chosenProxy}`);
 
   // lock it for "cooldown" ms
   const currentStats = getStatsForProxy(chosenProxy);
   const cooldown = currentStats.cooldown || DEFAULT_LOCK_DURATION_MS;
   lockedProxies[chosenProxy] = now + cooldown;
+  logger.debug(`getNextProxy: Locked proxy ${chosenProxy} for ${cooldown}ms (until ${lockedProxies[chosenProxy]})`);
 
   return chosenProxy;
 }
@@ -141,10 +153,12 @@ function getNextProxy() {
  *  - re-locks the proxy until now + newCooldown
  */
 function reportProxyFailure(proxy) {
+  logger.debug(`reportProxyFailure: Reporting failure for proxy: ${proxy}`);
   const now = Date.now();
   const stats = getStatsForProxy(proxy);
 
   stats.failCount += 1;
+  logger.debug(`reportProxyFailure: Current failCount for ${proxy} is ${stats.failCount}`);
 
   let newCooldown = stats.cooldown
     ? stats.cooldown * FAILURE_MULTIPLIER
@@ -154,9 +168,11 @@ function reportProxyFailure(proxy) {
     newCooldown = MAX_LOCK_DURATION_MS;
   }
   stats.cooldown = newCooldown;
+  logger.debug(`reportProxyFailure: New cooldown for ${proxy} is set to ${newCooldown}ms`);
 
   // re-lock
   lockedProxies[proxy] = now + newCooldown;
+  logger.debug(`reportProxyFailure: Proxy ${proxy} locked until ${lockedProxies[proxy]}`);
 
   saveProxyStats();
 }
@@ -169,16 +185,18 @@ function reportProxyFailure(proxy) {
  *  - re-locks or unlocks the proxy
  */
 function reportProxySuccess(proxy) {
+  logger.debug(`reportProxySuccess: Reporting success for proxy: ${proxy}`);
   const now = Date.now();
   const stats = getStatsForProxy(proxy);
 
   stats.successCount += 1;
+  logger.debug(`reportProxySuccess: Success count for ${proxy} is now ${stats.successCount}`);
   // stats.failCount = 0; // optional if you want to reset fails
 
   stats.cooldown = DEFAULT_LOCK_DURATION_MS;
   // if you want it immediately available:
   lockedProxies[proxy] = now; 
-  // else lockedProxies[proxy] = now + stats.cooldown;
+  logger.debug(`reportProxySuccess: Proxy ${proxy} cooldown reset to ${DEFAULT_LOCK_DURATION_MS}ms and unlocked`);
 
   saveProxyStats();
 }
@@ -188,6 +206,7 @@ function reportProxySuccess(proxy) {
 // ------------------------------------
 function getStatsForProxy(proxy) {
   if (!proxyStats[proxy]) {
+    logger.debug(`getStatsForProxy: No stats for ${proxy}, initializing default stats`);
     proxyStats[proxy] = {
       cooldown: DEFAULT_LOCK_DURATION_MS,
       successCount: 0,
@@ -207,9 +226,11 @@ function getStatsForProxy(proxy) {
  *  - if there's '@', tries to encode user/pass
  */
 function fixProxyUrl(proxyUrl) {
+  logger.debug(`fixProxyUrl: Fixing proxy URL: ${proxyUrl}`);
   // If the user didn't provide "://", we prepend "http://"
   if (!proxyUrl.includes('://')) {
     proxyUrl = 'http://' + proxyUrl;
+    logger.debug(`fixProxyUrl: Added protocol, new URL: ${proxyUrl}`);
   }
 
   // protocolEnd => where "://" finishes
@@ -221,6 +242,7 @@ function fixProxyUrl(proxyUrl) {
   // if no '@', no credentials => just return
   const atIndex = remainder.lastIndexOf('@');
   if (atIndex === -1) {
+    logger.debug(`fixProxyUrl: No credentials found in URL: ${proxyUrl}`);
     return proxyUrl;
   }
 
@@ -232,13 +254,17 @@ function fixProxyUrl(proxyUrl) {
   if (colonIndex === -1) {
     // only username
     const encodedUsername = encodeURIComponent(credentials);
-    return protocol + encodedUsername + '@' + hostPart;
+    const fixedUrl = protocol + encodedUsername + '@' + hostPart;
+    logger.debug(`fixProxyUrl: Encoded username only, fixed URL: ${fixedUrl}`);
+    return fixedUrl;
   } else {
     const username = credentials.slice(0, colonIndex);
     const password = credentials.slice(colonIndex + 1);
     const encodedUsername = encodeURIComponent(username);
     const encodedPassword = encodeURIComponent(password);
-    return protocol + encodedUsername + ':' + encodedPassword + '@' + hostPart;
+    const fixedUrl = protocol + encodedUsername + ':' + encodedPassword + '@' + hostPart;
+    logger.debug(`fixProxyUrl: Encoded username and password, fixed URL: ${fixedUrl}`);
+    return fixedUrl;
   }
 }
 
@@ -249,23 +275,27 @@ function fixProxyUrl(proxyUrl) {
  *  - else returns {}
  */
 function getProxyAuthHeaders(proxyUrl) {
+  logger.debug(`getProxyAuthHeaders: Getting auth headers for proxy: ${proxyUrl}`);
   try {
     const fixedUrl = fixProxyUrl(proxyUrl);
     const parsed = new URL(fixedUrl);
 
     if (parsed.username || parsed.password) {
       const credentials = Buffer.from(`${parsed.username}:${parsed.password}`).toString('base64');
+      logger.debug(`getProxyAuthHeaders: Credentials found, returning headers`);
       return { 'Proxy-Authorization': `Basic ${credentials}` };
     }
   } catch (err) {
-    console.error('Error parsing proxy URL:', err);
+    logger.error('getProxyAuthHeaders: Error parsing proxy URL:', err);
   }
+  logger.debug(`getProxyAuthHeaders: No credentials found, returning empty headers`);
   return {};
 }
 
 // ------------------------------------
 // Initialization
 // ------------------------------------
+logger.debug('Initializing proxy pool: Loading proxies and proxy stats');
 loadProxies();
 loadProxyStats();
 
