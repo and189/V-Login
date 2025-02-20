@@ -102,7 +102,7 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
     page = pg;
 
     // Sehr kurzer Timeout
-    const NAV_TIMEOUT_MS = 2000;
+    const NAV_TIMEOUT_MS = 5000;
     page.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
 
     logger.debug(`[${uniqueSessionId}] Goto => ${initialAuthUrl} (timeout ${NAV_TIMEOUT_MS}ms)`);
@@ -186,7 +186,7 @@ async function launchAndConnectToBrowser(initialAuthUrl, username, password, pro
   const { getNextProxy } = require('../utils/proxyPool');
 
   let attempts = 0;
-  const maxAttempts = 5;
+  const maxAttempts = 3;
 
   while (attempts < maxAttempts) {
     attempts++;
