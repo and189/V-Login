@@ -8,13 +8,10 @@ const { v4: uuidv4 } = require('uuid');
 const { URLSearchParams } = require('url');
 const { getNextProxy } = require('../utils/proxyPool');
 
-// --- NEW: Global variable to track if a request is already in progress
 let isBusy = false;
 
 router.post('/', async (req, res) => {
-  // 1. Check if a request is already in progress
   if (isBusy) {
-    // Reject the request (e.g., 503 - Service Unavailable)
     logger.warn('Another login request is already in progress, rejecting new request.');
     return res.status(503).json({
       status: AuthResponseStatus.ERROR,
@@ -22,21 +19,16 @@ router.post('/', async (req, res) => {
     });
   }
 
-  // 2. Mark that a request is now being processed
   isBusy = true;
-
   const startTime = Date.now();
   const requestId = uuidv4();
-  let proxy; // declared here so it is accessible in the finish listener
+  let proxy;
 
   logger.info(`Received login request - Request ID: ${requestId}`);
 
   try {
     const { url, username, password } = req.body;
-
-    // Attach a finish event listener to log final details (including actual HTTP status code)
     res.on('finish', () => {
-      // Extract dragoName from the User-Agent header (e.g., "Dragonite/1.13.3-testing (Level) Git/04e1203)")
       const dragoName = req.headers['user-agent'] || 'unknown';
       logger.info(`Request processed in ${(Date.now() - startTime) / 1000}s for ${username || 'unknown'} using ${proxy || 'none'} result ${res.statusCode}. Request by ${dragoName}`);
     });
@@ -50,7 +42,6 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // 1. Retrieve a proxy from the pool
     try {
       proxy = getNextProxy();
       logger.info(`[Request ID: ${requestId}] Using proxy: ${proxy}`);
@@ -62,7 +53,6 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // 2. (Optional) Configuration parameters as query string
     const config = {
       proxy,
       platform: 'mac',
@@ -71,17 +61,16 @@ router.post('/', async (req, res) => {
     const query = new URLSearchParams({ config: JSON.stringify(config) });
     logger.info(`[Request ID: ${requestId}] Config: ${JSON.stringify(config)}`);
 
-    // 3. Start login attempt
     logger.info(`[Request ID: ${requestId}] Starting first login attempt...`);
     const result = await loginWithRetry(url, username, password, proxy);
 
-    // Error handling
     if (result.error) {
       if (result.error === "IP_BLOCKED") {
-        //logger.warn(`[Request ID: ${requestId}] IP blocked => waiting 60s => no response`);
-        //await new Promise(resolve => setTimeout(resolve, 60000));
-       // logger.warn(`[Request ID: ${requestId}] 60s over => returning silently`);
-        return;
+        logger.warn(`[Request ID: ${requestId}] IP_BLOCKED detected`);
+        return res.status(403).json({
+          status: AuthResponseStatus.ERROR,
+          description: "IP is blocked."
+        });
       }
       if (["ACCOUNT_BANNED", "IMPERVA_BLOCKED"].includes(result.error)) {
         logger.warn(`[Request ID: ${requestId}] BANNED => 418`);
@@ -90,8 +79,8 @@ router.post('/', async (req, res) => {
           description: "Account is banned or Imperva blocked"
         });
       }
-      if (result.error === "LOGIN_FAILED") {
-        logger.warn(`[Request ID: ${requestId}] Invalid credentials => 400`);
+      if (["LOGIN_FAILED", "INVALID_CREDENTIALS", "ACCOUNT_DISABLED"].includes(result.error)) {
+        logger.warn(`[Request ID: ${requestId}] Login failed => 400`);
         return res.status(400).json({
           status: AuthResponseStatus.INVALID,
           description: "Invalid credentials or login error"
@@ -104,7 +93,6 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Success
     if (result.token) {
       logger.info(`[Request ID: ${requestId}] SUCCESS => 200, login_code: ${result.token}`);
       return res.status(200).json({
@@ -114,7 +102,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    logger.error(`[Request ID: ${requestId}] No error, no token => unexpected => 500`);
+    logger.error(`[Request ID: ${requestId}] No token found unexpectedly => 500`);
     return res.status(500).json({
       status: AuthResponseStatus.ERROR,
       description: "No token found unexpectedly"
@@ -127,7 +115,6 @@ router.post('/', async (req, res) => {
       description: "Internal server error"
     });
   } finally {
-    // 3. Release the busy flag so the next request can be processed
     isBusy = false;
   }
 });
