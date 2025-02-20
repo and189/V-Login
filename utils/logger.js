@@ -4,10 +4,10 @@ const winston = require('winston');
 const logLevel = process.env.LOG_LEVEL || 'debug'; 
 
 // Custom Format: Request-ID, Timestamp, Log-Level and Message
-const customFormat = winston.format.printf(({ timestamp, level, message, requestId,...meta }) => {
+const customFormat = winston.format.printf(({ timestamp, level, message, requestId, ...meta }) => {
   // If requestId exists, prepend it to the message
-  const prefix = requestId? `[${requestId}] `: ''; 
-  const metaString = Object.keys(meta).length? JSON.stringify(meta, null, 2): '';
+  const prefix = requestId ? `[${requestId}] ` : ''; 
+  const metaString = Object.keys(meta).length ? JSON.stringify(meta, null, 2) : '';
   return `${timestamp} [${level}] ${prefix}${message} ${metaString}`;
 });
 
@@ -41,5 +41,8 @@ const logger = winston.createLogger({
 logger.setRequestId = (requestId) => {
   logger.defaultMeta = { requestId }; 
 };
+
+// Zusätzlicher Debug-Log beim Initialisieren des Loggers
+logger.debug(`Logger initialized with log level: ${logLevel}`);
 
 module.exports = logger;
