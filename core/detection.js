@@ -9,9 +9,13 @@ async function bypassPuppeteerDetection(page) {
         "Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3]})",
         "Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']})"
     ];
+    
     for (const script of scripts) {
+        logger.debug(`Evaluating anti-detection script: ${script}`);
         await page.evaluate(script);
+        logger.debug("Script evaluation completed");
     }
+    logger.debug("Anti-detection measures applied successfully");
 }
 
 module.exports = { bypassPuppeteerDetection };
