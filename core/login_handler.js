@@ -3,6 +3,39 @@ const { v4: uuidv4 } = require('uuid');
 const { setTimeoutPromise } = require('../utils/helpers');
 
 /**
+ * Hilfsfunktion: Listet alle vorhandenen input-Felder mit relevanten Infos.
+ */
+async function debugAvailableInputs(page, uniqueSessionId) {
+  try {
+    const allInputs = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll('input')).map(input => ({
+        name: input.getAttribute('name'),
+        id: input.id,
+        type: input.type,
+        outerHTML: input.outerHTML
+      }));
+    });
+    logger.warn(`[${uniqueSessionId}] Currently present input fields: ${JSON.stringify(allInputs, null, 2)}`);
+  } catch (err) {
+    logger.warn(`[${uniqueSessionId}] Could not list input fields: ${err.message}`);
+  }
+}
+
+/**
+ * Hilfsfunktion: Listet alle button-ähnlichen Elemente (button, input[type="button"], input[type="submit"]).
+ */
+async function debugAvailableButtons(page, uniqueSessionId) {
+  try {
+    const allButtons = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('button,input[type="button"],input[type="submit"]')).map(el => el.outerHTML)
+    );
+    logger.warn(`[${uniqueSessionId}] Currently present button-like elements: ${JSON.stringify(allButtons, null, 2)}`);
+  } catch (err) {
+    logger.warn(`[${uniqueSessionId}] Could not list button elements: ${err.message}`);
+  }
+}
+
+/**
  * Helper-Funktion: Sucht den Login-Button im aktuellen Frame und in allen iFrames
  * und loggt den outerHTML, wenn er gefunden wird.
  */
@@ -141,14 +174,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
     } catch (err) {
       logger.warn(`[${uniqueSessionId}] Could not find 'input#email': ${err.message}`);
       // Alle input-Felder auslesen
-      try {
-        const inputs = await page.evaluate(() =>
-          Array.from(document.querySelectorAll('input')).map(el => el.outerHTML)
-        );
-        logger.warn(`[${uniqueSessionId}] Currently present input fields: ${JSON.stringify(inputs)}`);
-      } catch (listErr) {
-        logger.warn(`[${uniqueSessionId}] Could not list input fields: ${listErr.message}`);
-      }
+      await debugAvailableInputs(page, uniqueSessionId);
       throw err;
     }
 
@@ -163,14 +189,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
     } catch (err) {
       logger.warn(`[${uniqueSessionId}] Could not find 'input#password': ${err.message}`);
       // Alle input-Felder auslesen
-      try {
-        const inputs = await page.evaluate(() =>
-          Array.from(document.querySelectorAll('input')).map(el => el.outerHTML)
-        );
-        logger.warn(`[${uniqueSessionId}] Currently present input fields: ${JSON.stringify(inputs)}`);
-      } catch (listErr) {
-        logger.warn(`[${uniqueSessionId}] Could not list input fields: ${listErr.message}`);
-      }
+      await debugAvailableInputs(page, uniqueSessionId);
       throw err;
     }
 
@@ -192,14 +211,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
       } catch (err) {
         logger.warn(`[${uniqueSessionId}] Could not find login button '${loginButtonSelector}': ${err.message}`);
         // Falls Button nicht gefunden, alle Buttons ausgeben
-        try {
-          const allButtons = await page.evaluate(() =>
-            Array.from(document.querySelectorAll('button,input[type="button"],input[type="submit"]')).map(el => el.outerHTML)
-          );
-          logger.warn(`[${uniqueSessionId}] Currently present button-like elements: ${JSON.stringify(allButtons)}`);
-        } catch (listErr) {
-          logger.warn(`[${uniqueSessionId}] Could not list button elements: ${listErr.message}`);
-        }
+        await debugAvailableButtons(page, uniqueSessionId);
         throw err;
       }
 
