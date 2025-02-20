@@ -1,5 +1,4 @@
-// routes/login.js
-
+// api/login.js
 const express = require('express');
 const router = express.Router();
 const { loginWithRetry } = require('../core/login_with_retry');
@@ -9,26 +8,31 @@ const { v4: uuidv4 } = require('uuid');
 const { URLSearchParams } = require('url');
 const { getNextProxy } = require('../utils/proxyPool');
 
+let isBusy = false;
+
 router.post('/', async (req, res) => {
+  if (isBusy) {
+    logger.warn('Another login request is already in progress, rejecting new request.');
+    return res.status(503).json({
+      status: AuthResponseStatus.ERROR,
+      description: "Server is busy, only one login request at a time."
+    });
+  }
+
+  isBusy = true;
   const startTime = Date.now();
   const requestId = uuidv4();
   let proxy;
 
   logger.info(`Received login request - Request ID: ${requestId}`);
 
-  // Wenn die Response fertig ist, loggen wir die Dauer, den Status und den User-Agent
-  res.on('finish', () => {
-    const durationSec = ((Date.now() - startTime) / 1000).toFixed(3);
-    const dragoName = req.headers['user-agent'] || 'unknown';
-    logger.info(
-      `Request processed in ${durationSec}s for ${req.body.username || 'unknown'} using ${proxy || 'none'} ` +
-      `result ${res.statusCode}. Request by ${dragoName}`
-    );
-  });
-
   try {
-    // Validierung der Input-Parameter
     const { url, username, password } = req.body;
+    res.on('finish', () => {
+      const dragoName = req.headers['user-agent'] || 'unknown';
+      logger.info(`Request processed in ${(Date.now() - startTime) / 1000}s for ${username || 'unknown'} using ${proxy || 'none'} result ${res.statusCode}. Request by ${dragoName}`);
+    });
+
     const required = ["url", "username", "password"];
     if (!required.every(key => req.body[key])) {
       logger.error(`[Request ID: ${requestId}] Missing required parameters`);
@@ -38,7 +42,6 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Nächsten Proxy aus dem Pool holen
     try {
       proxy = getNextProxy();
       logger.info(`[Request ID: ${requestId}] Using proxy: ${proxy}`);
@@ -50,7 +53,6 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Beispiel: Hier könnte man dem Browserless-Config-Objekt Proxy-Daten mitgeben
     const config = {
       proxy,
       platform: 'mac',
@@ -60,13 +62,11 @@ router.post('/', async (req, res) => {
     logger.info(`[Request ID: ${requestId}] Config: ${JSON.stringify(config)}`);
 
     logger.info(`[Request ID: ${requestId}] Starting first login attempt...`);
-    // -> loginWithRetry: dein Core-Login, das am Ende { error: "..."} oder { token: "..."} zurückgibt
     const result = await loginWithRetry(url, username, password, proxy);
 
-    // 1) Wenn wir einen Fehler haben:
     if (result.error) {
       if (result.error === "IP_BLOCKED") {
-        logger.warn(`[Request ID: ${requestId}] IP_BLOCKED detected => 403`);
+        logger.warn(`[Request ID: ${requestId}] IP_BLOCKED detected`);
         return res.status(403).json({
           status: AuthResponseStatus.ERROR,
           description: "IP is blocked."
@@ -86,7 +86,6 @@ router.post('/', async (req, res) => {
           description: "Invalid credentials or login error"
         });
       }
-      // Ansonsten unbekannter Fehler => 500
       logger.error(`[Request ID: ${requestId}] Unhandled error => 500 => ${result.error}`);
       return res.status(500).json({
         status: AuthResponseStatus.ERROR,
@@ -94,32 +93,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // 2) Kein "error", also haben wir entweder ein token ODER ...
     if (result.token) {
-      // -> **NEUE ABFRAGE**: Falls "token" in Wahrheit "IP_BLOCKED" oder andere Fehlerstrings enthält:
-      if (result.token === "IP_BLOCKED") {
-        logger.warn(`[Request ID: ${requestId}] IP_BLOCKED detected (token) => 403`);
-        return res.status(403).json({
-          status: AuthResponseStatus.ERROR,
-          description: "IP is blocked."
-        });
-      }
-      if (["ACCOUNT_BANNED", "IMPERVA_BLOCKED"].includes(result.token)) {
-        logger.warn(`[Request ID: ${requestId}] BANNED => 418 (token)`);
-        return res.status(418).json({
-          status: AuthResponseStatus.BANNED,
-          description: "Account is banned or Imperva blocked"
-        });
-      }
-      if (["LOGIN_FAILED", "INVALID_CREDENTIALS", "ACCOUNT_DISABLED"].includes(result.token)) {
-        logger.warn(`[Request ID: ${requestId}] Login failed => 400 (token)`);
-        return res.status(400).json({
-          status: AuthResponseStatus.INVALID,
-          description: "Invalid credentials or login error"
-        });
-      }
-
-      // => Ansonsten ist es wirklich ein Erfolgs-Token
       logger.info(`[Request ID: ${requestId}] SUCCESS => 200, login_code: ${result.token}`);
       return res.status(200).json({
         status: AuthResponseStatus.SUCCESS,
@@ -128,7 +102,6 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // 3) Weder error noch token => unexpected
     logger.error(`[Request ID: ${requestId}] No token found unexpectedly => 500`);
     return res.status(500).json({
       status: AuthResponseStatus.ERROR,
@@ -141,6 +114,8 @@ router.post('/', async (req, res) => {
       status: AuthResponseStatus.ERROR,
       description: "Internal server error"
     });
+  } finally {
+    isBusy = false;
   }
 });
 
