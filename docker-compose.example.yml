@@ -21,7 +21,6 @@ services:
     ports:
       - "5090:5090"
     volumes:
-    volumes:
       - ./proxies.txt:/app/proxies.txt:ro
       - ./proxyStats.json:/app/proxyStats.json
-      restart: unless-stopped
+    restart: unless-stopped
