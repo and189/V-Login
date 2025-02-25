@@ -19,8 +19,14 @@ let cookieUsageCount = 0;
  */
 async function postDiscordText(message) {
   const webhookUrl = process.env.DISCORD_WEBHOOK;
-  if (!webhookUrl) {
-    logger.warn("No Discord webhook URL configured in .env");
+  const discordEnabled = process.env.DISCORD_WEBHOOK_ENABLED === 'true';
+  const discordEnabledEffective = process.env.DISCORD_WEBHOOK_ENABLED ? discordEnabled : false;
+  if (!webhookUrl || !discordEnabledEffective) {
+    if (!webhookUrl) {
+      logger.warn("No Discord webhook URL configured in .env");
+    } else if (!discordEnabledEffective) {
+      logger.warn("Discord webhook is disabled via .env");
+    }
     return;
   }
   try {
@@ -39,8 +45,14 @@ async function postDiscordText(message) {
  */
 async function sendDiscordScreenshot(message, screenshotBuffer) {
   const webhookUrl = process.env.DISCORD_WEBHOOK;
-  if (!webhookUrl) {
-    logger.warn("No Discord webhook URL configured in .env");
+  const discordEnabled = process.env.DISCORD_WEBHOOK_ENABLED === 'true';
+  const discordEnabledEffective = process.env.DISCORD_WEBHOOK_ENABLED ? discordEnabled : false;
+  if (!webhookUrl || !discordEnabledEffective) {
+    if (!webhookUrl) {
+      logger.warn("No Discord webhook URL configured in .env");
+    } else if (!discordEnabledEffective) {
+      logger.warn("Discord webhook is disabled via .env");
+    }
     return;
   }
   const form = new FormData();
@@ -72,7 +84,7 @@ function sleep(ms) {
  * @param {object} page - Die Puppeteer-Seite.
  * @param {number} ms - Anzahl der Millisekunden.
  */
-async function waitFor(page, ms) {
+async function waitFor(page, ms = 7000) {
   if (page.waitForTimeout) {
     await page.waitForTimeout(ms);
   } else if (page.waitFor) {
@@ -91,9 +103,9 @@ async function waitFor(page, ms) {
 async function captureAndSendScreenshot(page, message) {
   if (page) {
     try {
-      await waitFor(page, 30000);
+      await waitFor(page, 7000);
       try {
-        await page.waitForSelector('body', { timeout: 5000 });
+        await page.waitForSelector('body', { timeout: 15000 });
       } catch (e) {
         logger.warn("Waiting for selector 'body' failed, proceeding with screenshot: " + e.message);
       }
@@ -180,15 +192,15 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
     
     // Nun zur Haupt-URL navigieren
     logger.debug(`Session ${uniqueSessionId}: Navigating to ${initialAuthUrl}`);
-    let baseTimeout = Number(module.exports.DEFAULT_TIMEOUT) || 100000;
-    let navigationTimeout = wsEndpoint.toLowerCase().includes('proxy') ? baseTimeout * 3 : baseTimeout;
+    let baseTimeout = 7000;
+    let navigationTimeout = 7000;
     logger.debug(`Session ${uniqueSessionId}: Navigation timeout set to ${navigationTimeout}ms`);
     page.setDefaultNavigationTimeout(navigationTimeout);
 
     // Quick-Response-Check: Warte bis zu 2000ms auf den ersten Netzwerk-Response
     // const quickResponse = new Promise((resolve, reject) => {
     //   page.once('response', () => resolve());
-    //   setTimeout(() => reject(new Error("No network response received within 2000ms")), 2000);
+    //   setTimeout(() => reject(new Error("No network response received within 7000ms")), 7000);
     // });
     // try {
     //   await quickResponse;
