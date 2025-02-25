@@ -1,7 +1,12 @@
-const winston = require('winston');
+if (global.logger) {
+  module.exports = global.logger;
+  return;
+}
 
+const winston = require('winston');
+ 
 // Default log level is "info" - can be set to "debug" for development, for example.
-const logLevel = process.env.LOG_LEVEL || 'debug'; 
+const logLevel = process.env.LOG_LEVEL || 'debug';
 
 // Custom Format: Request-ID, Timestamp, Log-Level and Message
 const customFormat = winston.format.printf(({ timestamp, level, message, requestId, ...meta }) => {
@@ -45,4 +50,6 @@ logger.setRequestId = (requestId) => {
 // Zusätzlicher Debug-Log beim Initialisieren des Loggers
 logger.debug(`Logger initialized with log level: ${logLevel}`);
 
+global.logger = logger;
+ 
 module.exports = logger;

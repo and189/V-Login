@@ -27,6 +27,21 @@ if (module === require.main) {
     logger.info(`Starting server on port ${port}`);
     app.listen(port, '0.0.0.0', () => {
         logger.info(`Server listening on port ${port}`);
+        const fs = require('fs');
+        const sourceFile = 'proxy_data/proxyStats.json';
+        const destFile = 'proxy_data/proxyStats.json';
+        try {
+          fs.mkdirSync('proxy_data', { recursive: true });
+          if (fs.existsSync(sourceFile)) {
+            logger.info(`${sourceFile} exists, attempting to copy`);
+            fs.copyFileSync(sourceFile, destFile);
+            logger.info(`Successfully copied ${sourceFile} to ${destFile}`);
+          } else {
+            logger.error(`${sourceFile} does not exist`);
+          }
+        } catch (err) {
+          logger.error(`Error copying ${sourceFile} to ${destFile}: ${err.message}`);
+        }
     });
 }
 

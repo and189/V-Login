@@ -16,11 +16,15 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: v-login
+    user: 1000:1000
     environment:
       - PORT=5090
     ports:
       - "5090:5090"
+    depends_on:
+      - browserless
+    networks:
+      - default
     volumes:
       - ./proxies.txt:/app/proxies.txt:ro
-      - ./proxyStats.json:/app/proxyStats.json
     restart: unless-stopped

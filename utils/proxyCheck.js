@@ -7,7 +7,7 @@ const logger = require('./logger');
  * @param {number} [timeout=5000] - Timeout in ms.
  * @returns {Promise<boolean>} - true if working, false otherwise.
  */
-async function isProxyWorking(proxyUrl, timeout = 5000) {
+async function isProxyWorking(proxyUrl, timeout = 10000) {
   logger.debug(`isProxyWorking: Checking proxy ${proxyUrl} with timeout ${timeout}ms`);
   try {
     // Use a simple GET to a known endpoint (e.g., ipify) with HTTP protocol

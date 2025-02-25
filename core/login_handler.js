@@ -165,9 +165,11 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
 
     // Warten auf das Username-Feld
     logger.debug(`[${uniqueSessionId}] Waiting for username input field ('input#email')`);
+    const usernameFieldStartTime = Date.now();
     try {
       await page.waitForSelector('input#email', { timeout: 10000 });
-      logger.debug(`[${uniqueSessionId}] Username field found. Focusing and typing username...`);
+      const usernameFieldEndTime = Date.now();
+      logger.debug(`[${uniqueSessionId}] Username field found in ${usernameFieldEndTime - usernameFieldStartTime}ms. Focusing and typing username...`);
       await page.focus('input#email');
       await page.keyboard.type(username);
       logger.debug(`[${uniqueSessionId}] Username typed successfully`);

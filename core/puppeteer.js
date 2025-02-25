@@ -91,7 +91,7 @@ async function waitFor(page, ms) {
 async function captureAndSendScreenshot(page, message) {
   if (page) {
     try {
-      await waitFor(page, 3000);
+      await waitFor(page, 30000);
       try {
         await page.waitForSelector('body', { timeout: 5000 });
       } catch (e) {
@@ -115,7 +115,7 @@ async function captureAndSendScreenshot(page, message) {
  * @returns {Promise<boolean>}
  */
 async function checkForCaptchaBan(page) {
-  await waitFor(page, 3000);
+  await waitFor(page, 30000);
   const content = await page.content();
   return content.includes("Additional security check is required");
 }
@@ -135,8 +135,8 @@ async function initBrowser(wsEndpoint) {
     await sleep(1000);
     const page = await browser.newPage();
 
-    const viewportWidth = 1200 + Math.floor(Math.random() * 200);
-    const viewportHeight = 700 + Math.floor(Math.random() * 100);
+    const viewportWidth = 800 + Math.floor(Math.random() * 200);
+    const viewportHeight = 600 + Math.floor(Math.random() * 100);
     logger.debug(`Setting viewport to width: ${viewportWidth}, height: ${viewportHeight}`);
     await page.setViewport({ width: viewportWidth, height: viewportHeight });
     await bypassPuppeteerDetection(page);
@@ -171,48 +171,36 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
   let attemptOutcome = '';
 
   try {
-    await postDiscordText(`Session ${uniqueSessionId}: Starting login attempt using wsEndpoint ${wsEndpoint}`);
+    // await postDiscordText(`Session ${uniqueSessionId}: Starting login attempt using wsEndpoint ${wsEndpoint}`);
     logger.info(`Starting Puppeteer session - Session ID: ${uniqueSessionId}`);
     const { browser: br, page: pg } = await initBrowser(wsEndpoint);
     browser = br;
     page = pg;
 
-    // Sende Screenshot des initialen Browserzustands
-    await captureAndSendScreenshot(page, `Session ${uniqueSessionId}: Browser launched`);
-
-    // Zunächst kurz zu Google navigieren und Screenshot senden
-    await page.goto('https://www.google.com', { waitUntil: 'domcontentloaded', timeout: 10000 });
-    await sleep(2000);
-    await captureAndSendScreenshot(page, `Session ${uniqueSessionId}: Google homepage loaded`);
-
-    // Anschließend zu Pokémon US navigieren und Screenshot senden
-    await page.goto('https://www.pokemon.com/us', { waitUntil: 'domcontentloaded', timeout: 10000 });
-    await sleep(2000);
-    await captureAndSendScreenshot(page, `Session ${uniqueSessionId}: Pokémon US homepage loaded`);
-
+    
     // Nun zur Haupt-URL navigieren
     logger.debug(`Session ${uniqueSessionId}: Navigating to ${initialAuthUrl}`);
-    let baseTimeout = Number(DEFAULT_NAVIGATION_TIMEOUT_MS) || 10000;
+    let baseTimeout = Number(module.exports.DEFAULT_TIMEOUT) || 100000;
     let navigationTimeout = wsEndpoint.toLowerCase().includes('proxy') ? baseTimeout * 3 : baseTimeout;
     logger.debug(`Session ${uniqueSessionId}: Navigation timeout set to ${navigationTimeout}ms`);
     page.setDefaultNavigationTimeout(navigationTimeout);
 
     // Quick-Response-Check: Warte bis zu 2000ms auf den ersten Netzwerk-Response
-    const quickResponse = new Promise((resolve, reject) => {
-      page.once('response', () => resolve());
-      setTimeout(() => reject(new Error("No network response received within 2000ms")), 2000);
-    });
-    try {
-      await quickResponse;
-      logger.debug(`Session ${uniqueSessionId}: Quick response received, proceeding with navigation`);
-    } catch (quickErr) {
-      const msg = `Session ${uniqueSessionId}: Quick response check failed: ${quickErr.message}`;
-      logger.warn(msg);
-      await postDiscordText(msg);
-      await captureAndSendScreenshot(page, msg);
-      attemptOutcome = "NO_RESPONSE";
-      return { error: "NO_RESPONSE", description: quickErr.message };
-    }
+    // const quickResponse = new Promise((resolve, reject) => {
+    //   page.once('response', () => resolve());
+    //   setTimeout(() => reject(new Error("No network response received within 2000ms")), 2000);
+    // });
+    // try {
+    //   await quickResponse;
+    //   logger.debug(`Session ${uniqueSessionId}: Quick response received, proceeding with navigation`);
+    // } catch (quickErr) {
+    //   const msg = `Session ${uniqueSessionId}: Quick response check failed: ${quickErr.message}`;
+    //   logger.warn(msg);
+    //   // await postDiscordText(msg);
+    //   await captureAndSendScreenshot(page, msg);
+    //   attemptOutcome = "NO_RESPONSE";
+    //   return { error: "NO_RESPONSE", description: quickErr.message };
+    // }
 
     try {
       await page.goto(initialAuthUrl, { waitUntil: 'domcontentloaded', timeout: navigationTimeout });
@@ -220,7 +208,7 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
       const msg = `Session ${uniqueSessionId}: Navigation to main URL failed after ${navigationTimeout}ms: ${err.message}`;
       logger.warn(msg);
       await captureAndSendScreenshot(page, msg);
-      await postDiscordText(msg);
+      // await postDiscordText(msg);
       attemptOutcome = "TIMEOUT";
       return { error: "TIMEOUT", description: msg };
     }
@@ -238,7 +226,7 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
       const msg = `Session ${uniqueSessionId}: Imperva triggered IP ban`;
       logger.error(msg);
       await captureAndSendScreenshot(page, msg);
-      await postDiscordText(msg);
+      // await postDiscordText(msg);
       attemptOutcome = "IP_BLOCKED";
       return { error: "IP_BLOCKED" };
     }
@@ -248,25 +236,24 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
       const msg = `Session ${uniqueSessionId}: Login resulted in IP_BLOCKED`;
       logger.warn(msg);
       await captureAndSendScreenshot(page, msg);
-      await postDiscordText(msg);
+      // await postDiscordText(msg);
       attemptOutcome = "IP_BLOCKED";
       return { error: "IP_BLOCKED" };
     } else if (loginResult === "ACCOUNT_BANNED") {
       const msg = `Session ${uniqueSessionId}: Account banned during login`;
       logger.warn(msg);
-      await postDiscordText(msg);
+      // await postDiscordText(msg);
       attemptOutcome = "ACCOUNT_BANNED";
       return { error: "ACCOUNT_BANNED" };
     } else if (loginResult === "INVALID_CREDENTIALS") {
       const msg = `Session ${uniqueSessionId}: Invalid credentials`;
       logger.warn(msg);
-      await postDiscordText(msg);
       attemptOutcome = "INVALID_CREDENTIALS";
       return { error: "INVALID_CREDENTIALS" };
     } else if (loginResult === "ACCOUNT_DISABLED") {
       const msg = `Session ${uniqueSessionId}: Account temporarily disabled`;
       logger.warn(msg);
-      await postDiscordText(msg);
+      // await postDiscordText(msg);
       attemptOutcome = "ACCOUNT_DISABLED";
       return { error: "ACCOUNT_DISABLED" };
     } else if (loginResult === "LOGIN_FAILED") {
@@ -280,13 +267,13 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
       const msg = `Session ${uniqueSessionId}: Login successful, final code: ${loginResult}`;
       logger.info(msg);
       await captureAndSendScreenshot(page, msg);
-      await postDiscordText(msg);
+      // await postDiscordText(msg);
       attemptOutcome = "SUCCESS";
       return { token: loginResult };
     } else {
       const msg = `Session ${uniqueSessionId}: Unknown error during login`;
       logger.warn(msg);
-      await postDiscordText(msg);
+      // await postDiscordText(msg);
       attemptOutcome = "LOGIN_FAILED";
       return { error: "LOGIN_FAILED" };
     }
@@ -296,13 +283,13 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
     if (page) {
       await captureAndSendScreenshot(page, msg);
     }
-    await postDiscordText(msg);
+    // await postDiscordText(msg);
     attemptOutcome = "CRITICAL_ERROR";
     return { error: "CRITICAL_ERROR", description: error.message };
   } finally {
     if (browser) {
       logger.debug(`Session ${uniqueSessionId}: Closing browser (Outcome: ${attemptOutcome})`);
-      await postDiscordText(`Session ${uniqueSessionId} finished with outcome: ${attemptOutcome}`);
+      // await postDiscordText(`Session ${uniqueSessionId} finished with outcome: ${attemptOutcome}`);
       try {
         await browser.close();
       } catch (e) {
@@ -344,8 +331,7 @@ async function launchAndConnectToBrowser(initialAuthUrl, username, password, pro
       startupUrls: [initialAuthUrl],
       skipProxyChecking: true,
       clearCacheOnClose: true,
-      languages: ["en-US", "en"],
-      args: { "--disable-blink-features=AutomationControlled": "" },
+      args: { "--lang": "en-US" },
     };
 
     let selectedProxy = null;
