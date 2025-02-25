@@ -1,1 +1,702 @@
-[]
+{
+  "http://104.207.33.190:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 2,
+    "lastUsed": 1740506168297
+  },
+  "http://156.228.100.179:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740503542139
+  },
+  "http://156.228.84.254:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 2,
+    "lastUsed": 1740506248575
+  },
+  "http://156.228.118.123:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 2,
+    "lastUsed": 1740505808102
+  },
+  "http://156.228.93.229:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740503525159
+  },
+  "http://154.213.202.23:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740503511329
+  },
+  "http://154.213.193.227:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740503518329
+  },
+  "http://156.228.89.21:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740503886808
+  },
+  "http://104.207.61.142:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.233.85.218:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504243585
+  },
+  "http://156.228.95.30:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505210451
+  },
+  "http://104.167.28.205:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://104.167.25.148:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505230377
+  },
+  "http://156.253.167.201:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740506411092
+  },
+  "http://156.233.84.225:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505030987
+  },
+  "http://104.207.46.148:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504030605
+  },
+  "http://104.207.56.189:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.253.166.151:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504253445
+  },
+  "http://156.233.94.9:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.233.86.143:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505354800
+  },
+  "http://156.228.118.86:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740503886810
+  },
+  "http://156.253.167.161:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504061872
+  },
+  "http://45.202.78.113:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.253.164.227:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 2,
+    "lastUsed": 1740504960684
+  },
+  "http://154.94.13.217:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 2,
+    "lastUsed": 1740505668108
+  },
+  "http://104.207.42.246:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 2,
+    "lastUsed": 1740505210453
+  },
+  "http://156.228.185.81:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 2,
+    "lastUsed": 1740505900869
+  },
+  "http://156.249.137.109:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505240328
+  },
+  "http://154.213.203.122:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504037420
+  },
+  "http://156.253.166.54:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.228.92.148:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504466640
+  },
+  "http://156.228.76.89:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505516176
+  },
+  "http://156.228.125.73:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504096531
+  },
+  "http://156.228.111.20:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505040985
+  },
+  "http://104.207.57.166:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505761257
+  },
+  "http://154.213.194.240:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505690964
+  },
+  "http://104.207.62.246:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504456610
+  },
+  "http://156.253.166.172:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.253.178.241:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504075893
+  },
+  "http://156.228.88.31:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 2,
+    "lastUsed": 1740505596904
+  },
+  "http://156.228.185.92:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504173843
+  },
+  "http://104.167.26.232:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 2,
+    "lastUsed": 1740505567312
+  },
+  "http://156.253.175.59:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.228.91.173:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.228.185.232:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://154.213.196.27:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505060773
+  },
+  "http://156.228.176.238:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504204198
+  },
+  "http://156.253.165.71:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504980535
+  },
+  "http://156.253.166.103:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505250259
+  },
+  "http://104.207.57.51:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.253.170.34:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505220557
+  },
+  "http://156.228.91.46:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.233.93.48:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505738154
+  },
+  "http://156.228.190.121:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://154.214.1.104:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740503907530
+  },
+  "http://104.167.29.129:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505784526
+  },
+  "http://156.228.175.191:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 2,
+    "lastUsed": 1740505878108
+  },
+  "http://45.201.10.4:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505831006
+  },
+  "http://104.207.34.71:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 2,
+    "lastUsed": 1740506208233
+  },
+  "http://156.240.99.246:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://104.207.35.171:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505070650
+  },
+  "http://156.228.190.245:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.228.92.122:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505050956
+  },
+  "http://154.94.14.163:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.228.85.135:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504223903
+  },
+  "http://104.207.38.170:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504016955
+  },
+  "http://156.240.99.48:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://154.94.15.17:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 2,
+    "lastUsed": 1740506501786
+  },
+  "http://104.207.62.60:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.253.164.53:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505324361
+  },
+  "http://154.213.197.118:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://154.94.13.140:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504214086
+  },
+  "http://104.207.54.202:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 2,
+    "lastUsed": 1740504970672
+  },
+  "http://156.228.87.34:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.228.85.11:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504061870
+  },
+  "http://154.213.195.84:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740503900706
+  },
+  "http://154.94.13.169:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504082769
+  },
+  "http://156.228.171.216:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504486291
+  },
+  "http://156.228.108.140:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 2,
+    "lastUsed": 1740505334516
+  },
+  "http://156.228.113.204:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://104.207.38.62:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505030985
+  },
+  "http://156.228.184.63:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504233723
+  },
+  "http://104.207.37.162:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.228.178.146:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740503914363
+  },
+  "http://156.228.184.168:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 2,
+    "lastUsed": 1740505582159
+  },
+  "http://154.214.1.32:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505714295
+  },
+  "http://104.207.49.215:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505344656
+  },
+  "http://104.207.34.136:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 2,
+    "lastUsed": 1740506288545
+  },
+  "http://156.228.95.232:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.233.74.216:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505260108
+  },
+  "http://104.207.60.140:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504010043
+  },
+  "http://154.94.12.50:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.253.170.238:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740505853940
+  },
+  "http://156.228.90.152:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.228.116.163:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504110452
+  },
+  "http://156.253.169.105:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://104.207.44.249:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://156.253.164.155:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504103506
+  },
+  "http://156.253.164.147:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 0,
+    "lastUsed": 0
+  },
+  "http://104.207.53.4:3128": {
+    "cooldown": 900000,
+    "successCount": 0,
+    "failCount": 0,
+    "useCount": 1,
+    "lastUsed": 1740504960683
+  }
+}

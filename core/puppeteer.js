@@ -1,14 +1,8 @@
-// core/puppeteer.js
-// Dieses Modul verwaltet Puppeteer-Sessions für automatisierte Login-Prozesse.
-// Es verbindet sich über einen WebSocket mit dem Browser, richtet Seiten mit
-// randomisierten Viewports ein, wendet Anti-Erkennungsmechanismen an, führt den Login durch
-// und speichert bei erfolgreichem Laden Cookies für die nächsten 5 Accounts.
-
 const puppeteer = require('puppeteer-core');
 const logger = require('../utils/logger');
 const { bypassPuppeteerDetection } = require('./detection');
 const { v4: uuidv4 } = require('uuid');
-const { IMPERVA_CHECK_TEXT } = require('../config/constants');
+const { IMPERVA_CHECK_TEXT, DEFAULT_NAVIGATION_TIMEOUT_MS } = require('../config/constants');
 const { performLogin } = require('./login_handler');
 const { isIpBanned } = require('../utils/ipUtils');
 const axios = require('axios');
@@ -19,7 +13,26 @@ let cookieCache = null;
 let cookieUsageCount = 0;
 
 /**
- * Hilfsfunktion, um einen Screenshot samt Nachricht an einen Discord-Webhook zu senden.
+ * Sendet eine einfache Textnachricht an den Discord-Webhook.
+ *
+ * @param {string} message - Die Nachricht, die gesendet werden soll.
+ */
+async function postDiscordText(message) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK;
+  if (!webhookUrl) {
+    logger.warn("No Discord webhook URL configured in .env");
+    return;
+  }
+  try {
+    await axios.post(webhookUrl, { content: message });
+    logger.info("Discord text message posted successfully");
+  } catch (err) {
+    logger.error("Failed to post Discord message: " + err.message);
+  }
+}
+
+/**
+ * Sendet einen Screenshot samt Nachricht an den Discord-Webhook.
  *
  * @param {string} message - Die zu sendende Nachricht.
  * @param {Buffer} screenshotBuffer - Der Screenshot als Buffer.
@@ -45,7 +58,16 @@ async function sendDiscordScreenshot(message, screenshotBuffer) {
 }
 
 /**
- * Hilfsfunktion, die eine Wartezeit realisiert.
+ * Wartet die angegebene Anzahl von Millisekunden.
+ *
+ * @param {number} ms - Anzahl der Millisekunden.
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Realisiert eine Wartezeit.
  *
  * @param {object} page - Die Puppeteer-Seite.
  * @param {number} ms - Anzahl der Millisekunden.
@@ -110,7 +132,7 @@ async function initBrowser(wsEndpoint) {
   let browser = null;
   try {
     browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await sleep(1000);
     const page = await browser.newPage();
 
     const viewportWidth = 1200 + Math.floor(Math.random() * 200);
@@ -127,125 +149,164 @@ async function initBrowser(wsEndpoint) {
 
 /**
  * Führt eine komplette Puppeteer-Session aus:
- *   - Verbindet sich mit dem Browser,
- *   - Prüft auf IP-Ban,
- *   - Prüft vorab auf einen Captcha-/Bann-Hinweis und bricht ab, wenn einer gefunden wird,
- *   - Navigiert zur Login-URL,
- *   - Falls die Navigation fehlschlägt (z.B. wegen Timeout) und ein Cookie-Cache vorhanden ist,
- *     wird der Vorgang abgebrochen, damit im Retry-Loop ein neuer Proxy gewählt werden kann,
- *   - Prüft auf Imperva-Blockierung,
- *   - Führt den Login durch,
- *   - Speichert (falls noch nicht vorhanden) die Cookies für künftige Logins,
- *   - Gibt den ory-code bzw. Fehlercodes zurück,
- *   - Schickt bei Fehlern Screenshots,
- *   - Schließt den Browser.
+ * - Verbindet sich mit dem Browser,
+ * - Navigiert zuerst kurz zu Google, macht einen Screenshot und sendet diesen an Discord,
+ * - Navigiert anschließend zu https://www.pokemon.com/us, macht einen Screenshot und sendet diesen,
+ * - Navigiert schließlich zur Haupt-URL (initialAuthUrl) und wartet bis geladen,
+ * - Prüft auf Imperva-Blockierung,
+ * - Führt den Login durch,
+ * - Postet am Ende einen Discord-Post mit dem Ergebnis,
+ * - Schließt den Browser.
  *
- * @param {string} initialAuthUrl - URL für die Authentifizierung.
- * @param {string} username - Der Login-Benutzername.
- * @param {string} password - Das Login-Passwort.
- * @param {string} wsEndpoint - Der WebSocket-Endpunkt.
+ * @param {string} initialAuthUrl - URL zur Authentifizierung (Haupt-URL).
+ * @param {string} username - Login-Benutzername.
+ * @param {string} password - Login-Passwort.
+ * @param {string} wsEndpoint - WebSocket-Endpunkt.
  * @returns {Promise<{ token?: string, error?: string, description?: string }>}
  */
 async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
   let browser = null;
   let page = null;
   const uniqueSessionId = uuidv4();
+  let attemptOutcome = '';
 
   try {
+    await postDiscordText(`Session ${uniqueSessionId}: Starting login attempt using wsEndpoint ${wsEndpoint}`);
     logger.info(`Starting Puppeteer session - Session ID: ${uniqueSessionId}`);
     const { browser: br, page: pg } = await initBrowser(wsEndpoint);
     browser = br;
     page = pg;
 
-    // Prüfe, ob die Seite bereits einen Captcha-/Bann-Hinweis anzeigt, bevor die URL aufgerufen wird
-    if (await checkForCaptchaBan(page)) {
-      const msg = `Captcha ban detected before navigation for session ${uniqueSessionId}`;
-      logger.error(msg);
+    // Sende Screenshot des initialen Browserzustands
+    await captureAndSendScreenshot(page, `Session ${uniqueSessionId}: Browser launched`);
+
+    // Zunächst kurz zu Google navigieren und Screenshot senden
+    await page.goto('https://www.google.com', { waitUntil: 'domcontentloaded', timeout: 10000 });
+    await sleep(2000);
+    await captureAndSendScreenshot(page, `Session ${uniqueSessionId}: Google homepage loaded`);
+
+    // Anschließend zu Pokémon US navigieren und Screenshot senden
+    await page.goto('https://www.pokemon.com/us', { waitUntil: 'domcontentloaded', timeout: 10000 });
+    await sleep(2000);
+    await captureAndSendScreenshot(page, `Session ${uniqueSessionId}: Pokémon US homepage loaded`);
+
+    // Nun zur Haupt-URL navigieren
+    logger.debug(`Session ${uniqueSessionId}: Navigating to ${initialAuthUrl}`);
+    let baseTimeout = Number(DEFAULT_NAVIGATION_TIMEOUT_MS) || 10000;
+    let navigationTimeout = wsEndpoint.toLowerCase().includes('proxy') ? baseTimeout * 3 : baseTimeout;
+    logger.debug(`Session ${uniqueSessionId}: Navigation timeout set to ${navigationTimeout}ms`);
+    page.setDefaultNavigationTimeout(navigationTimeout);
+
+    // Quick-Response-Check: Warte bis zu 2000ms auf den ersten Netzwerk-Response
+    const quickResponse = new Promise((resolve, reject) => {
+      page.once('response', () => resolve());
+      setTimeout(() => reject(new Error("No network response received within 2000ms")), 2000);
+    });
+    try {
+      await quickResponse;
+      logger.debug(`Session ${uniqueSessionId}: Quick response received, proceeding with navigation`);
+    } catch (quickErr) {
+      const msg = `Session ${uniqueSessionId}: Quick response check failed: ${quickErr.message}`;
+      logger.warn(msg);
+      await postDiscordText(msg);
       await captureAndSendScreenshot(page, msg);
-      return { error: "CAPTCHA_BANNED", description: msg };
+      attemptOutcome = "NO_RESPONSE";
+      return { error: "NO_RESPONSE", description: quickErr.message };
     }
 
-    logger.debug(`Navigating to ${initialAuthUrl} - Session ID: ${uniqueSessionId}`);
-    // Setze das Standard-Navigationstiming auf 3 Sekunden
-    page.setDefaultNavigationTimeout(3000);
-
-    // Nutze Promise.race, um entweder den erfolgreichen Abschluss von page.goto oder einen manuellen Timeout zu erhalten
-    const gotoPromise = page.goto(initialAuthUrl, { waitUntil: 'domcontentloaded' });
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Navigation timeout exceeded")), 3000)
-    );
-
     try {
-      await Promise.race([gotoPromise, timeoutPromise]);
+      await page.goto(initialAuthUrl, { waitUntil: 'domcontentloaded', timeout: navigationTimeout });
     } catch (err) {
-      const msg = `Navigation timed out after 3 seconds: ${err.message}`;
-      logger.warn(`[${uniqueSessionId}] ${msg}`);
+      const msg = `Session ${uniqueSessionId}: Navigation to main URL failed after ${navigationTimeout}ms: ${err.message}`;
+      logger.warn(msg);
       await captureAndSendScreenshot(page, msg);
-      try {
-        await page.close(); // Direktes Schließen der Seite beim Timeout
-      } catch (e) {
-        logger.error(`Error closing page on timeout: ${e.message}`);
-      }
+      await postDiscordText(msg);
+      attemptOutcome = "TIMEOUT";
       return { error: "TIMEOUT", description: msg };
     }
 
-    logger.debug(`Navigation completed to ${page.url()} - Session ID: ${uniqueSessionId}`);
+    logger.debug(`Session ${uniqueSessionId}: Navigation completed to ${page.url()}`);
 
-    // Falls noch kein Cookie-Cache vorhanden ist, speichere die aktuellen Cookies für die nächsten 5 Accounts
     if (!cookieCache) {
       cookieCache = await page.cookies();
       cookieUsageCount = 5;
-      logger.debug(`Cookie cache stored with ${cookieCache.length} cookies; will reuse for next ${cookieUsageCount} accounts`);
+      logger.debug(`Session ${uniqueSessionId}: Cookie cache stored with ${cookieCache.length} cookies`);
     }
 
     const pageSource = await page.content();
     if (pageSource.includes(IMPERVA_CHECK_TEXT)) {
-      const msg = `Imperva triggered IP ban for session ${uniqueSessionId}`;
+      const msg = `Session ${uniqueSessionId}: Imperva triggered IP ban`;
       logger.error(msg);
       await captureAndSendScreenshot(page, msg);
+      await postDiscordText(msg);
+      attemptOutcome = "IP_BLOCKED";
       return { error: "IP_BLOCKED" };
     }
 
     const loginResult = await performLogin(page, username, password, uniqueSessionId);
-
     if (loginResult === "IP_BLOCKED") {
-      const msg = `Login attempt resulted in IP_BLOCKED for session ${uniqueSessionId}`;
+      const msg = `Session ${uniqueSessionId}: Login resulted in IP_BLOCKED`;
       logger.warn(msg);
       await captureAndSendScreenshot(page, msg);
+      await postDiscordText(msg);
+      attemptOutcome = "IP_BLOCKED";
       return { error: "IP_BLOCKED" };
     } else if (loginResult === "ACCOUNT_BANNED") {
-      logger.warn(`[${uniqueSessionId}] Account banned detected during login`);
+      const msg = `Session ${uniqueSessionId}: Account banned during login`;
+      logger.warn(msg);
+      await postDiscordText(msg);
+      attemptOutcome = "ACCOUNT_BANNED";
       return { error: "ACCOUNT_BANNED" };
     } else if (loginResult === "INVALID_CREDENTIALS") {
-      logger.warn(`[${uniqueSessionId}] Invalid credentials detected => 400`);
+      const msg = `Session ${uniqueSessionId}: Invalid credentials`;
+      logger.warn(msg);
+      await postDiscordText(msg);
+      attemptOutcome = "INVALID_CREDENTIALS";
       return { error: "INVALID_CREDENTIALS" };
     } else if (loginResult === "ACCOUNT_DISABLED") {
-      logger.warn(`[${uniqueSessionId}] Account temporarily disabled => 400`);
+      const msg = `Session ${uniqueSessionId}: Account temporarily disabled`;
+      logger.warn(msg);
+      await postDiscordText(msg);
+      attemptOutcome = "ACCOUNT_DISABLED";
       return { error: "ACCOUNT_DISABLED" };
     } else if (loginResult === "LOGIN_FAILED") {
-      logger.warn(`[${uniqueSessionId}] Login process failed (LOGIN_FAILED)`);
+      const msg = `Session ${uniqueSessionId}: Login process failed`;
+      logger.warn(msg);
+      await postDiscordText(msg);
+      await captureAndSendScreenshot(page, msg);
+      attemptOutcome = "LOGIN_FAILED";
       return { error: "LOGIN_FAILED" };
     } else if (typeof loginResult === "string") {
-      logger.info(`[${uniqueSessionId}] Final code => ${loginResult}`);
+      const msg = `Session ${uniqueSessionId}: Login successful, final code: ${loginResult}`;
+      logger.info(msg);
+      await captureAndSendScreenshot(page, msg);
+      await postDiscordText(msg);
+      attemptOutcome = "SUCCESS";
       return { token: loginResult };
     } else {
-      logger.warn(`[${uniqueSessionId}] Login failed`);
+      const msg = `Session ${uniqueSessionId}: Unknown error during login`;
+      logger.warn(msg);
+      await postDiscordText(msg);
+      attemptOutcome = "LOGIN_FAILED";
       return { error: "LOGIN_FAILED" };
     }
   } catch (error) {
-    const msg = `Critical error in session ${uniqueSessionId}: ${error.message}`;
+    const msg = `Session ${uniqueSessionId}: Critical error: ${error.message}`;
     logger.error(msg);
     if (page) {
       await captureAndSendScreenshot(page, msg);
     }
+    await postDiscordText(msg);
+    attemptOutcome = "CRITICAL_ERROR";
     return { error: "CRITICAL_ERROR", description: error.message };
   } finally {
     if (browser) {
-      logger.debug(`Closing browser - Session ID: ${uniqueSessionId}`);
+      logger.debug(`Session ${uniqueSessionId}: Closing browser (Outcome: ${attemptOutcome})`);
+      await postDiscordText(`Session ${uniqueSessionId} finished with outcome: ${attemptOutcome}`);
       try {
         await browser.close();
       } catch (e) {
-        logger.error(`Browser close error: ${e.message}`);
+        logger.error(`Session ${uniqueSessionId}: Error closing browser: ${e.message}`);
       }
     }
   }
@@ -254,20 +315,23 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
 /**
  * Einstiegspunkt, der den Browser mit (optional) Proxy-Konfiguration startet,
  * sich via WebSocket verbindet und den Login-Prozess durchführt.
- * Wenn ein Captcha oder IP-Ban festgestellt wird, wird die Session beendet und es
- * wird ein neuer Proxy aus dem Pool versucht, bis ein erfolgreicher Login erfolgt.
+ * Falls ein temporärer Fehler (z. B. NO_RESPONSE, CAPTCHA_BANNED, IP_BLOCKED, TIMEOUT oder LOGIN_FAILED)
+ * auftritt, wird bis zu 3 Mal erneut versucht – jeweils mit einem neuen Proxy bzw. einem neuen Browser.
+ *
+ * Wichtig: Beim ersten Versuch wird ein übergebener Proxy (proxyIndicator) genutzt. Falls proxyIndicator ein Promise ist, wird er aufgelöst.
  *
  * @param {string} initialAuthUrl - URL zur Authentifizierung.
  * @param {string} username - Der Login-Benutzername.
  * @param {string} password - Das Login-Passwort.
- * @param {string} proxyIndicator - Proxy-Zeichenkette (falls angegeben).
+ * @param {string|Promise<string>} proxyIndicator - (Optional) Ein initial zu nutzender Proxy oder ein Promise darauf.
  * @returns {Promise<{ token?: string, error?: string, description?: string }>}
  */
 async function launchAndConnectToBrowser(initialAuthUrl, username, password, proxyIndicator) {
-  const host = 'browserless:8848';
-  const maxAttempts = 5;
+  const host = 'localhost:8848';
+  const maxAttempts = 3;
   let attempt = 0;
   let result = null;
+  let working = false;
   while (attempt < maxAttempts) {
     attempt++;
     const config = {
@@ -275,33 +339,32 @@ async function launchAndConnectToBrowser(initialAuthUrl, username, password, pro
       once: true,
       platform: 'windows',
       kernel: 'chromium',
-      disableImageLoading: true,
       timedCloseSec: 60,
       kernelMilestone: '130',
       startupUrls: [initialAuthUrl],
       skipProxyChecking: true,
       clearCacheOnClose: true,
       languages: ["en-US", "en"],
-      args: {
-        "--lang": "en-US"
-      },
+      args: { "--disable-blink-features=AutomationControlled": "" },
     };
 
-    if (typeof proxyIndicator === 'string' && proxyIndicator.trim().length > 0) {
-      config.proxy = proxyIndicator;
-      logger.debug(`Using provided proxy: ${proxyIndicator}`);
+    let selectedProxy = null;
+    if (attempt === 1 && proxyIndicator) {
+      if (typeof proxyIndicator.then === 'function') {
+        selectedProxy = await proxyIndicator;
+      } else if (typeof proxyIndicator === 'string') {
+        selectedProxy = proxyIndicator;
+      }
+      logger.debug(`Using provided proxy for first attempt: ${selectedProxy}`);
     } else {
       const { getNextProxy } = require('../utils/proxyPool');
-      let selectedProxy = null;
-      let working = false;
+      working = false;
       const maxProxyAttempts = 5;
       let proxyAttempt = 0;
       while (!working && proxyAttempt < maxProxyAttempts) {
         proxyAttempt++;
         selectedProxy = await getNextProxy();
-        if (!selectedProxy) {
-          break;
-        }
+        if (!selectedProxy) break;
         const { isProxyWorking } = require('../utils/proxyCheck');
         working = await isProxyWorking(selectedProxy);
         if (!working) {
@@ -309,11 +372,13 @@ async function launchAndConnectToBrowser(initialAuthUrl, username, password, pro
         }
       }
       if (working && typeof selectedProxy === 'string') {
-        config.proxy = selectedProxy;
         logger.debug(`Using proxy from proxyPool: ${selectedProxy}`);
       } else {
         logger.debug('No working proxies found; using local IP');
       }
+    }
+    if (selectedProxy) {
+      config.proxy = selectedProxy;
     }
 
     const browserWSEndpoint = `ws://${host}/devtool/launch?config=${encodeURIComponent(JSON.stringify(config))}`;
@@ -322,8 +387,15 @@ async function launchAndConnectToBrowser(initialAuthUrl, username, password, pro
     result = await runPuppeteer(initialAuthUrl, username, password, browserWSEndpoint);
     if (result.token) {
       return result;
-    } else if (result.error === "CAPTCHA_BANNED" || result.error === "IP_BLOCKED" || result.error === "TIMEOUT") {
-      logger.warn(`Attempt ${attempt} failed with error ${result.error}. Trying next proxy...`);
+    }
+    if (
+      result.error === "CAPTCHA_BANNED" ||
+      result.error === "IP_BLOCKED" ||
+      result.error === "TIMEOUT" ||
+      result.error === "LOGIN_FAILED" ||
+      result.error === "NO_RESPONSE"
+    ) {
+      logger.warn(`Attempt ${attempt} failed with error ${result.error}. Retrying with a new proxy...`);
       continue;
     } else {
       return result;

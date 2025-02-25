@@ -8,7 +8,7 @@ const logger = require('./logger'); // Verwende den Logger für Debug-Ausgaben
 // ------------------------------------
 
 // Default cooldown for newly used or successful proxies (example: 10s)
-const DEFAULT_LOCK_DURATION_MS = 10 * 1000; 
+const DEFAULT_LOCK_DURATION_MS = 15 * 60 * 1000; 
 
 // Maximum lock duration (e.g., 12 hours)
 const MAX_LOCK_DURATION_MS = 12 * 60 * 60 * 1000; 
@@ -82,7 +82,17 @@ function loadProxyStats() {
   try {
     if (fs.existsSync(PROXY_STATS_FILE)) {
       const content = fs.readFileSync(PROXY_STATS_FILE, 'utf8');
-      proxyStats = JSON.parse(content);
+      const rawProxyStats = JSON.parse(content);
+      // Fix proxy URLs to ensure consistency
+      proxyStats = Object.keys(rawProxyStats).reduce((acc, proxyUrl) => {
+        const fixedProxyUrl = fixProxyUrl(proxyUrl);
+        const stats = rawProxyStats[proxyUrl];
+        acc[fixedProxyUrl] = {
+          ...stats,
+          lastUsed: Number(stats.lastUsed) || 0, // Ensure lastUsed is a number
+        };
+        return acc;
+      }, {});
       logger.debug('Proxy stats loaded successfully');
     } else {
       logger.debug('No proxy stats file found, starting with empty stats');
@@ -125,7 +135,13 @@ function getNextProxy() {
   // Filter out locked proxies
   const unlockedProxies = proxyList.filter(proxy => {
     const lockedUntil = lockedProxies[proxy];
-    return !lockedUntil || lockedUntil < now;
+    const currentStats = getStatsForProxy(proxy);
+    const cooldown = currentStats.cooldown || DEFAULT_LOCK_DURATION_MS;
+    const lastUsed = currentStats.lastUsed || 0;
+    const unlockedAt = lastUsed + cooldown;
+    const isUnlocked = !lockedUntil || lockedUntil <= now;
+    logger.debug(`Proxy ${proxy} - lockedUntil: ${lockedUntil}, unlockedUntil: ${unlockedAt}, now: ${now}, isUnlocked: ${isUnlocked}`);
+    return isUnlocked;
   });
 
   if (unlockedProxies.length === 0) {
@@ -141,7 +157,9 @@ function getNextProxy() {
   const currentStats = getStatsForProxy(chosenProxy);
   const cooldown = currentStats.cooldown || DEFAULT_LOCK_DURATION_MS;
   lockedProxies[chosenProxy] = now + cooldown;
+  currentStats.lastUsed = now;
   logger.debug(`getNextProxy: Locked proxy ${chosenProxy} for ${cooldown}ms (until ${lockedProxies[chosenProxy]})`);
+  logger.debug(`getNextProxy: Updated lastUsed for ${chosenProxy} to ${currentStats.lastUsed}`);
 
   return chosenProxy;
 }
@@ -172,7 +190,10 @@ function reportProxyFailure(proxy) {
 
   // re-lock
   lockedProxies[proxy] = now + newCooldown;
-  logger.debug(`reportProxyFailure: Proxy ${proxy} locked until ${lockedProxies[proxy]}`);
+  stats.lastUsed = now;
+  logger.debug(`reportProxyFailure: Proxy ${proxy} locked until ${lockedProxies[proxy]} (now + newCooldown)`);
+  logger.debug(`reportProxyFailure: Updated lastUsed for ${proxy} to ${stats.lastUsed}`);
+  reportToProxyPool(proxy, false);
 
   saveProxyStats();
 }
@@ -195,8 +216,11 @@ function reportProxySuccess(proxy) {
 
   stats.cooldown = DEFAULT_LOCK_DURATION_MS;
   // if you want it immediately available:
-  lockedProxies[proxy] = now; 
-  logger.debug(`reportProxySuccess: Proxy ${proxy} cooldown reset to ${DEFAULT_LOCK_DURATION_MS}ms and unlocked`);
+  lockedProxies[proxy] = now;
+  stats.lastUsed = now;
+  logger.debug(`reportProxySuccess: Proxy ${proxy} unlocked`);
+  logger.debug(`reportProxySuccess: Updated lastUsed for ${proxy} to ${stats.lastUsed}`);
+  reportToProxyPool(proxy, true);
 
   saveProxyStats();
 }
@@ -210,7 +234,8 @@ function getStatsForProxy(proxy) {
     proxyStats[proxy] = {
       cooldown: DEFAULT_LOCK_DURATION_MS,
       successCount: 0,
-      failCount: 0
+      failCount: 0,
+      lastUsed: 0 // Timestamp of last use
     };
   }
   return proxyStats[proxy];
@@ -304,5 +329,25 @@ module.exports = {
   reportProxyFailure,
   reportProxySuccess,
   getProxyAuthHeaders,
-  fixProxyUrl
+  fixProxyUrl,
+  reportToProxyPool,
 };
+
+/**
+ * reportToProxyPool:
+ *  - Reports proxy success/failure to an external proxypool service.
+ *  - THIS FUNCTION NEEDS TO BE IMPLEMENTED WITH THE CORRECT ENDPOINT AND DATA FORMAT.
+ */
+function reportToProxyPool(proxy, success) {
+  // TODO: Implement the reporting logic here.
+  // Example:
+  // const endpoint = 'YOUR_PROXYPOOL_ENDPOINT';
+  // const data = { proxy: proxy, success: success };
+  // try {
+  //   await axios.post(endpoint, data);
+  //   logger.debug(`Successfully reported proxy ${proxy} to proxypool`);
+  // } catch (error) {
+  //   logger.error(`Failed to report proxy ${proxy} to proxypool: ${error.message}`);
+  // }
+  logger.warn(`reportToProxyPool: Not implemented.  Need to implement the reporting logic here.`);
+}
