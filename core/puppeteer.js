@@ -327,7 +327,7 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
  * @returns {Promise<{ token?: string, error?: string, description?: string }>}
  */
 async function launchAndConnectToBrowser(initialAuthUrl, username, password, proxyIndicator) {
-  const host = 'localhost:8848';
+  const host = 'browserless:8848';
   const maxAttempts = 3;
   let attempt = 0;
   let result = null;
