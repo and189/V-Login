@@ -182,7 +182,9 @@ function reportProxyFailure(proxy) {
   logger.debug(`reportProxyFailure: Reporting failure for proxy: ${proxy}`);
   const now = Date.now();
   const stats = getStatsForProxy(proxy);
+  logger.info(`reportProxyFailure: Proxy ${proxy}. Current failCount: ${stats.failCount}`);
   stats.failCount += 1;
+  logger.info(`reportProxyFailure: Proxy ${proxy}. New failCount: ${stats.failCount}`);
   let newCooldown = (stats.cooldown || DEFAULT_LOCK_DURATION_MS) * FAILURE_MULTIPLIER;
   if (newCooldown > MAX_LOCK_DURATION_MS) {
     newCooldown = MAX_LOCK_DURATION_MS;
@@ -203,7 +205,9 @@ function reportProxySuccess(proxy) {
   logger.debug(`reportProxySuccess: Reporting success for proxy: ${proxy}`);
   const now = Date.now();
   const stats = getStatsForProxy(proxy);
+  logger.info(`reportProxySuccess: Reporting success for proxy: ${proxy}. Current successCount: ${stats.successCount}`);
   stats.successCount += 1;
+  logger.info(`reportProxySuccess: Proxy ${proxy}. New successCount: ${stats.successCount}`);
   stats.cooldown = DEFAULT_LOCK_DURATION_MS;
   stats.lastUsed = now;
   logger.debug(`reportProxySuccess: Proxy ${proxy} cooldown reset to ${DEFAULT_LOCK_DURATION_MS}ms`);
