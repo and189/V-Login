@@ -96,7 +96,6 @@ function saveProxyStats() {
  */
 function getStatsForProxy(proxy) {
   if (!proxyStats[proxy]) {
-    logger.debug(`getStatsForProxy: No stats for ${proxy}, initializing default stats`);
     proxyStats[proxy] = {
       cooldown: DEFAULT_LOCK_DURATION_MS,
       successCount: 0,
