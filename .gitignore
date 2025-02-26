@@ -1,4 +1,4 @@
 docker-compose.yml
 .env
 proxy_data/proxies.txt
-proxy_data/proxyStats.jso
+proxy_data/proxyStats.json
