@@ -105,7 +105,6 @@ async function captureAndSendScreenshot(page, message) {
     try {
       await waitFor(page, 7000);
       try {
-        // Timeout auf 15000ms gesetzt
         await page.waitForSelector('body', { timeout: 15000 });
       } catch (e) {
         logger.warn("Waiting for selector 'body' failed, proceeding with screenshot: " + e.message);
@@ -194,10 +193,26 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
     // Nun zur Haupt-URL navigieren
     logger.debug(`Session ${uniqueSessionId}: Navigating to ${initialAuthUrl}`);
     let baseTimeout = 7000;
-    // Wenn wsEndpoint "proxy" enthält, wird der Timeout auf baseTimeout * 3 gesetzt, ansonsten baseTimeout.
-    let navigationTimeout = wsEndpoint.toLowerCase().includes('proxy') ? baseTimeout * 3 : baseTimeout;
+    let navigationTimeout = 7000;
     logger.debug(`Session ${uniqueSessionId}: Navigation timeout set to ${navigationTimeout}ms`);
     page.setDefaultNavigationTimeout(navigationTimeout);
+
+    // Quick-Response-Check: Warte bis zu 2000ms auf den ersten Netzwerk-Response
+    // const quickResponse = new Promise((resolve, reject) => {
+    //   page.once('response', () => resolve());
+    //   setTimeout(() => reject(new Error("No network response received within 7000ms")), 7000);
+    // });
+    // try {
+    //   await quickResponse;
+    //   logger.debug(`Session ${uniqueSessionId}: Quick response received, proceeding with navigation`);
+    // } catch (quickErr) {
+    //   const msg = `Session ${uniqueSessionId}: Quick response check failed: ${quickErr.message}`;
+    //   logger.warn(msg);
+    //   // await postDiscordText(msg);
+    //   await captureAndSendScreenshot(page, msg);
+    //   attemptOutcome = "NO_RESPONSE";
+    //   return { error: "NO_RESPONSE", description: quickErr.message };
+    // }
 
     try {
       await page.goto(initialAuthUrl, { waitUntil: 'domcontentloaded', timeout: navigationTimeout });
@@ -312,7 +327,7 @@ async function runPuppeteer(initialAuthUrl, username, password, wsEndpoint) {
  */
 async function launchAndConnectToBrowser(initialAuthUrl, username, password, proxyIndicator) {
   const host = 'browserless:8848';
-  const maxAttempts = 2;
+  const maxAttempts = 3;
   let attempt = 0;
   let result = null;
   let working = false;
