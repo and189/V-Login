@@ -1,5 +1,5 @@
 const logger = require('../utils/logger');
-const { launchAndConnectToBrowser } = require('./puppeteer');
+const Browser = require('./puppeteer');
 const { getNextProxy, reportProxyFailure, reportProxySuccess } = require('../utils/proxyPool');
 
 /**
@@ -18,15 +18,19 @@ async function loginWithRetry(url, username, password, proxy) {
   logger.info("Starting initial login attempt...");
 
   if (proxy) {
-    logger.debug(`Initial attempt will use provided proxy: ${proxy}`);
+    logger.debug(`Initial attempt will use provided proxy: ${await proxy}`);
   } else {
     logger.debug("Initial attempt will use local IP (no proxy provided)");
   }
 
-  // Attempt #1 mit dem angegebenen Proxy oder der lokalen IP.
-  logger.debug("Attempt #1: Calling launchAndConnectToBrowser with initial parameters...");
-  let result = await launchAndConnectToBrowser(url, username, password, proxy);
+  // Attempt #1 with provided proxy or local IP.
+  logger.debug("Attempt #1: Creating Browser instance and starting browser...");
+  const browser1 = new Browser(); // Instantiate Browser class
+  await browser1.startBrowser(); // Start the browser
+  logger.debug("Attempt #1: Calling loginFlow...");
+  let result = await browser1.loginFlow(url, username, password); // Call loginFlow
   logger.debug(`Attempt #1 result: ${JSON.stringify(result)}`);
+  await browser1.stopBrowser(); // Stop browser after attempt
 
   // Falls ein Proxy verwendet wurde, melden wir hier das Ergebnis.
   if (proxy) {
@@ -51,11 +55,15 @@ async function loginWithRetry(url, username, password, proxy) {
       return result; // Kein weiterer Proxy vorhanden – ursprüngliches Ergebnis zurückgeben.
     }
 
-    logger.info(`Switching to new proxy: ${newProxy}`);
-    // Attempt #2 mit dem neuen Proxy.
-    logger.debug("Attempt #2: Calling launchAndConnectToBrowser with new proxy...");
-    result = await launchAndConnectToBrowser(url, username, password, newProxy);
+    logger.info(`Switching to new proxy: ${await newProxy}`);
+    // Attempt #2 with new proxy.
+    logger.debug("Attempt #2: Creating Browser instance with new proxy and starting browser...");
+    const browser2 = new Browser({ proxy: newProxy }); // Instantiate Browser with proxy
+    await browser2.startBrowser(); // Start browser
+    logger.debug("Attempt #2: Calling loginFlow with new proxy...");
+    result = await browser2.loginFlow(url, username, password); // Call loginFlow
     logger.debug(`Attempt #2 result: ${JSON.stringify(result)}`);
+    await browser2.stopBrowser(); // Stop browser after attempt
 
     // Auch hier melden wir das Ergebnis anhand des verwendeten Proxies.
     if (result.token) {

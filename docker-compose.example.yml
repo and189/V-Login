@@ -1,15 +1,14 @@
-version: "3.8"
+version: "3.9"
 
 services:
   browserless:
-    image: nstbrowser/browserless:130-202412251400.v1
+    image: ghcr.io/browserless/chromium
     container_name: browserless
-    environment:
-      - TOKEN=110e2d21-efc4-44e5-853a-9ce4099c81e1
-      - PORT=8848
     ports:
-      - "8848:8848"
+      - "8848:3000"
     restart: unless-stopped
+    networks:
+      - app-network
 
   v-login:
     build:
@@ -18,10 +17,19 @@ services:
     container_name: v-login
     ports:
       - "5090:5090"
-    user: "1001:1001"
+    user: "${DOCKER_USER_ID}:${DOCKER_GROUP_ID}"
+    environment:
+      - DOCKER_USER_ID=1000
+      - DOCKER_GROUP_ID=1000
     volumes:
       - ./proxy_data:/app/proxy_data
     environment:
       - NODE_ENV=production
       - WRITE_DIR=/app
     restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

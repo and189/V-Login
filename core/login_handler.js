@@ -275,34 +275,34 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
     // Entscheidung basierend auf den ermittelten Informationen
     if (impervaBlocked) {
       logger.warn(`[${uniqueSessionId}] Imperva/IP block detected during login => returning "IP_BLOCKED"`);
-      return "IP_BLOCKED";
+      return { error: "IP_BLOCKED" };
     }
     if (bannedStatus) {
       logger.warn(`[${uniqueSessionId}] Banned status detected (HTTP 418) => returning "ACCOUNT_BANNED"`);
-      return "ACCOUNT_BANNED";
+      return { error: "ACCOUNT_BANNED" };
     }
     if (finalPageContent.includes("We are unable to log you in to this account. Please contact Customer Service")) {
       logger.error(`[${uniqueSessionId}] Final page indicates account ban => returning "ACCOUNT_BANNED"`);
-      return "ACCOUNT_BANNED";
+      return { error: "ACCOUNT_BANNED" };
     }
     if (finalPageContent.includes("Your username or password is incorrect.")) {
       logger.warn(`[${uniqueSessionId}] Final page indicates invalid credentials => returning "INVALID_CREDENTIALS"`);
-      return "INVALID_CREDENTIALS";
+      return { error: "INVALID_CREDENTIALS" };
     }
     if (finalPageContent.includes("your account has been disabled for")) {
       logger.error(`[${uniqueSessionId}] Final page indicates account disabled => returning "ACCOUNT_DISABLED"`);
-      return "ACCOUNT_DISABLED";
+      return { error: "ACCOUNT_DISABLED" };
     }
     if (finalPageContent.includes("Incapsula") || finalPageContent.includes("Request unsuccessful. Incapsula")) {
       logger.warn(`[${uniqueSessionId}] Final page indicates Incapsula protection => returning "IP_BLOCKED"`);
-      return "IP_BLOCKED";
+      return { error: "IP_BLOCKED" };
     }
     if (foundCode) {
       logger.info(`[${uniqueSessionId}] Login successful. Returning ory-code: ${foundCode}`);
-      return foundCode;
+      return { token: foundCode };
     }
     logger.warn(`[${uniqueSessionId}] No recognized error or code found => login failed (returning "LOGIN_FAILED")`);
-    return "LOGIN_FAILED";
+    return { error: "LOGIN_FAILED" };
   })();
 
   try {
@@ -312,7 +312,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
     return result;
   } catch (error) {
     logger.error(`[${uniqueSessionId}] Global login error: ${error.message}`);
-    return "LOGIN_FAILED";
+    return { error: "LOGIN_FAILED" };
   } finally {
     logger.debug(`[${uniqueSessionId}] Detaching response listener from page`);
     page.off('response', responseListener);
