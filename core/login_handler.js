@@ -100,8 +100,8 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
   let foundCode = null;        // Falls ein "ory_ac_..." Code in einer Response gefunden wird
   let bannedStatus = false;    // Wird true, wenn eine Response mit 418 zurückkommt
   let impervaBlocked = false;  // Wird true, wenn eine Response mit 403 oder "Incapsula" Text zurückkommt
+  let serviceUnavailable = false; // Wird true, wenn eine Response mit 503 zurückkommt
   const oryRegex = /ory_ac_[^&#]+/i;
-
   /**
    * Response listener: Sets flags based on HTTP status or text content and extracts the ory-code if necessary.
    */
@@ -117,6 +117,10 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
       if (status === 403) {
         impervaBlocked = true;
         logger.warn(`[${uniqueSessionId}] Response status 403 detected => possible IP block/Imperva`);
+      }
+      if (status === 503) {
+        serviceUnavailable = true;
+        logger.warn(`[${uniqueSessionId}] Response status 503 detected => service unavailable`);
       }
 
       try {
@@ -240,17 +244,16 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
     if (foundCode) {
       logger.info(`[${uniqueSessionId}] ory-code found during login process: ${foundCode}`);
     } else {
-      logger.debug(`[${uniqueSessionId}] No ory-code found from responses so far. Checking final URL for code...`);
-    }
-
-    const finalUrl = page.url();
-    logger.info(`[${uniqueSessionId}] Final URL after login process: ${finalUrl}`);
-
-    if (!foundCode) {
-      const finalMatch = oryRegex.exec(finalUrl);
-      if (finalMatch) {
-        foundCode = finalMatch[0];
-        logger.info(`[${uniqueSessionId}] Found ory-code in final URL: ${foundCode}`);
+      logger.debug(`[${uniqueSessionId}] No ory-code found from responses so far. Waiting additional 2000ms before final check...`);
+      await setTimeoutPromise(2000);
+      const finalUrlAfterWait = page.url();
+      logger.info(`[${uniqueSessionId}] URL after waiting: ${finalUrlAfterWait}`);
+      const finalMatchAfterWait = oryRegex.exec(finalUrlAfterWait);
+      if (finalMatchAfterWait) {
+        foundCode = finalMatchAfterWait[0];
+        logger.info(`[${uniqueSessionId}] Found ory-code after waiting in URL: ${foundCode}`);
+      } else {
+        logger.debug(`[${uniqueSessionId}] Still no ory-code found after waiting. Checking final page content for error indicators.`);
       }
     }
 
@@ -295,7 +298,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
       return { token: foundCode };
     }
     logger.warn(`[${uniqueSessionId}] No recognized error or code found => login failed (returning "LOGIN_FAILED")`);
-    return { error: "LOGIN_FAILED" };
+    return { error: "LOGIN_FAILED", serviceUnavailable: serviceUnavailable };
   })();
 
   try {

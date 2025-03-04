@@ -44,10 +44,10 @@ async function loginWithRetry(url, username, password, proxy) {
     }
   }
 
-  // Check if errors such as "IP_BLOCKED" or "NAVIGATION_TIMEOUT" exist.
-  if (result.error === "IP_BLOCKED" || result.error === "NAVIGATION_TIMEOUT") {
-    logger.warn(`Error type "${result.error}" detected. Attempting immediate switch to another proxy...`);
-
+  
+    // Check if errors such as "IP_BLOCKED", "NAVIGATION_TIMEOUT", or "SERVICE_UNAVAILABLE" exist.
+    if (result.error === "IP_BLOCKED" || result.error === "NAVIGATION_TIMEOUT" || result.serviceUnavailable) {
+      logger.warn(`Error type "${result.error}" detected. Attempting immediate switch to another proxy...`);
     // Get a new proxy from the pool.
     logger.debug("Fetching a new proxy from the proxy pool...");
     const newProxy = await getNextProxy();
