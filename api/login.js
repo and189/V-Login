@@ -9,7 +9,7 @@ const { getNextProxy } = require('../utils/proxyPool');
 // Configurable value - Default: 1 concurrent login
 // Log process.env.MAX_CONCURRENT_LOGINS before parsing
 logger.info(`process.env.MAX_CONCURRENT_LOGINS: ${process.env.MAX_CONCURRENT_LOGINS}`);
-const maxConcurrentLogins = +process.env.MAX_CONCURRENT_LOGINS || 2;
+const maxConcurrentLogins = +process.env.MAX_CONCURRENT_LOGINS || 1;
 logger.info(`MAX_CONCURRENT_LOGINS is set to: ${maxConcurrentLogins}`);
 let concurrentLogins = 0;
 
