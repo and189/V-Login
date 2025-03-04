@@ -10,7 +10,7 @@ const { reportProxyFailure } = require('../utils/proxyPool');
 
 class Browser {
   constructor(options = {}) {
-    // Optionen – der Proxy wird nun direkt aus dem Pool bezogen, daher keine statische Liste mehr.
+    // Options - the proxy is now obtained directly from the pool, therefore no more static list.
     this.options = {
       useUserAgent: true,
       overrideNavigator: true,
@@ -26,7 +26,7 @@ class Browser {
   }
 
   /**
-   * Stellt sicher, dass localhost/127.0.0.1 nicht über einen Proxy geleitet werden.
+   * Ensures that localhost/127.0.0.1 is not routed through a proxy.
    */
   static fixNoProxyForLocalhost() {
     const existingNoProxy = process.env.NO_PROXY || '';
@@ -115,10 +115,10 @@ class Browser {
   }
 
   /**
-   * Startet den Browser:
-   * - Holt einen Proxy direkt aus dem Proxy-Pool.
-   * - Baut den Browserless-WebSocket-Endpunkt mit dem Proxy zusammen.
-   * - Verbindet sich, erstellt eine neue Seite und führt Anti-Erkennungsmaßnahmen (Canvas-Manipulation, UserAgent, Navigator) aus.
+   * Starts the browser:
+   * - Gets a proxy directly from the proxy pool.
+   * - Builds the Browserless WebSocket endpoint with the proxy.
+   * - Connects, creates a new page and performs anti-detection measures (Canvas manipulation, UserAgent, Navigator).
    */
   async startBrowser() {
     console.log("Starting browser...");
@@ -146,7 +146,7 @@ class Browser {
 
     this.page = await this.browser.newPage();
 
-    // Falls Proxy-Authentifizierung nötig, kann hier `this.page.authenticate({ username, password })` aufgerufen werden
+    // If proxy authentication is required, `this.page.authenticate({ username, password })` can be called here
 
     // Canvas-Fingerprint manipulieren (Rauschen hinzufügen)
     await this.page.evaluateOnNewDocument(() => {
@@ -209,7 +209,7 @@ class Browser {
   async takeScreenshotIfEnabled(filePath) {
     if (this.options.takeScreenshots) {
       await this.page.screenshot({ path: filePath, fullPage: true });
-      console.log(`Screenshot ${filePath} erstellt`);
+      console.log(`Screenshot ${filePath} created`);
     }
   }
 
@@ -235,7 +235,7 @@ class Browser {
     await this.page.goto("https://browserleaks.com/canvas", { waitUntil: 'networkidle0' });
     await this.waitForSelectorIfEnabled("#canvas-hash");
     const content = await this.page.content();
-    content.split("\n").forEach(line => {
+    content.split("\\n").forEach(line => {
       if (line.includes('id="canvas-hash"')) {
         console.log(`Canvas fingerprint: ${line}`);
       }
@@ -243,13 +243,13 @@ class Browser {
   }
 
   /**
-   * Führt den Login-Flow durch:
-   * 1. Prüft den Canvas-Fingerprint und erstellt ggf. einen Screenshot.
-   * 2. Navigiert zur Login-URL und ruft den performLogin-Prozess auf.
-   * 3. Liefert ein Ergebnisobjekt zurück, das entweder ein Token (bei Erfolg) oder einen Error-Code enthält.
+   * Executes the login flow:
+   * 1. Checks the canvas fingerprint and creates a screenshot if necessary.
+   * 2. Navigates to the login URL and calls the performLogin process.
+   * 3. Returns a result object that contains either a token (on success) or an error code.
    */
   async loginFlow(initialAuthUrl, username, password) {
-    // Schritt 1: Canvas-Fingerprint prüfen & Screenshot
+    // Step 1: Check canvas fingerprint & screenshot
     await this.page.goto("https://browserleaks.com/canvas", { waitUntil: 'networkidle0' });
     await this.waitForSelectorIfEnabled("#canvas-hash");
     // await this.takeScreenshotIfEnabled("step1-browserleaks.png"); // Removed duplicate screenshot
@@ -267,7 +267,7 @@ class Browser {
     // --- End Proxy Check ---
 
 
-    // Schritt 2: Navigiere zur Login-URL
+    // Step 2: Navigate to the login URL
     const uniqueSessionId = uuidv4();
     logger.info(`[${uniqueSessionId}] Navigating to login URL: ${initialAuthUrl}`);
 
@@ -279,19 +279,19 @@ class Browser {
       return { error: "NAVIGATION_TIMEOUT", description: navigationError.message };
     }
     
-    // Schritt 3: Führe den Login-Vorgang aus
+    // Step 3: Execute the login process
     const loginResult = await performLogin(this.page, username, password, uniqueSessionId);
     if (loginResult.error) {
-      console.error(`Login fehlgeschlagen: ${loginResult.error}`);
-      await this.captureAndSendScreenshot(`Login fehlgeschlagen: ${loginResult.error}`);
+      console.error(`Login failed: ${loginResult.error}`);
+      await this.captureAndSendScreenshot(`Login failed: ${loginResult.error}`);
       return { error: loginResult.error };
     } else if (loginResult.token) {
       console.log(`Login erfolgreich, Token: ${loginResult.token}`);
       await this.captureAndSendScreenshot("Login erfolgreich");
       return { token: loginResult.token };
     } else {
-      console.error("Unbekannter Fehler während des Logins");
-      await this.captureAndSendScreenshot("Unbekannter Fehler während des Logins");
+      console.error("Unknown error during login");
+      await this.captureAndSendScreenshot("Unknown error during login");
       return { error: "UNKNOWN_ERROR" };
     }
   }

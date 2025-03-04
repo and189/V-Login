@@ -3,7 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const { setTimeoutPromise } = require('../utils/helpers');
 
 /**
- * Hilfsfunktion: Listet alle vorhandenen input-Felder mit relevanten Infos.
+ * Helper function: Lists all existing input fields with relevant information.
  */
 async function debugAvailableInputs(page, uniqueSessionId) {
   try {
@@ -22,7 +22,7 @@ async function debugAvailableInputs(page, uniqueSessionId) {
 }
 
 /**
- * Hilfsfunktion: Listet alle button-ähnlichen Elemente (button, input[type="button"], input[type="submit"]).
+ * Helper function: Lists all button-like elements (button, input[type="button"], input[type="submit"]).
  */
 async function debugAvailableButtons(page, uniqueSessionId) {
   try {
@@ -36,7 +36,7 @@ async function debugAvailableButtons(page, uniqueSessionId) {
 }
 
 /**
- * Helper-Funktion: Sucht den Login-Button im aktuellen Frame und in allen iFrames
+ * Helper function: Searches for the login button in the current frame and in all iFrames
  * und loggt den outerHTML, wenn er gefunden wird.
  */
 async function logLoginButton(page, uniqueSessionId) {
@@ -93,7 +93,7 @@ async function logLoginButton(page, uniqueSessionId) {
  * @param {string} username - Login username
  * @param {string} password - Login password
  * @param {string} [uniqueSessionId] - Optional unique session ID (auto-generated if not provided)
- * @returns {Promise<Object>} - Rückgabeobjekt: { token: <ory-code> } bei Erfolg oder { error: <Fehlercode> }
+ * @returns {Promise<Object>} - Return object: { token: <ory-code> } on success or { error: <error code> }
  */
 async function performLogin(page, username, password, uniqueSessionId = uuidv4()) {
   logger.debug(`[${uniqueSessionId}] Starting performLogin with username: ${username}`);
@@ -103,7 +103,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
   const oryRegex = /ory_ac_[^&#]+/i;
 
   /**
-   * Response listener: Setzt Flags basierend auf HTTP-Status oder Textinhalt und extrahiert ggf. den ory-code.
+   * Response listener: Sets flags based on HTTP status or text content and extracts the ory-code if necessary.
    */
   async function responseListener(response) {
     try {
@@ -158,10 +158,10 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
 
   // Haupt-Login-Prozess
   const loginProcess = (async () => {
-    // Zuerst: Login-Button suchen und HTML-Inhalt loggen
+    // First: Find login button and log HTML content
     await logLoginButton(page, uniqueSessionId);
 
-    // Warten auf das Username-Feld
+    // Waiting for the username field
     logger.debug(`[${uniqueSessionId}] Waiting for username input field ('input#email')`);
     const usernameFieldStartTime = Date.now();
     try {
@@ -177,7 +177,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
       throw err;
     }
 
-    // Warten auf das Passwort-Feld
+    // Waiting for the password field
     logger.debug(`[${uniqueSessionId}] Waiting for password input field ('input#password')`);
     try {
       await page.waitForSelector('input#password', { timeout: 10000 });
@@ -191,7 +191,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
       throw err;
     }
 
-    // Kurze Wartezeit nach Eingabe der Daten
+    // Short wait after entering the data
     logger.debug(`[${uniqueSessionId}] Waiting 1 second after entering credentials`);
     await setTimeoutPromise(1000);
 
@@ -211,12 +211,12 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
         throw err;
       }
 
-      // Wartezeit nach Klick
+      // Waiting time after click
       logger.debug(`[${uniqueSessionId}] Waiting 1 second after login button click`);
       await setTimeoutPromise(1000);
       logger.info(`[${uniqueSessionId}] URL after login click: ${page.url()}`);
 
-      // Falls eine Consent-Seite erkannt wird, diese behandeln
+      // If a consent page is detected, handle it
       if (page.url().includes("consent")) {
         logger.info(`[${uniqueSessionId}] Consent page detected. Initiating consent flow...`);
         try {
@@ -231,7 +231,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
         }
       }
 
-      // Weitere kurze Wartezeit vor den finalen Prüfungen
+      // Further short wait before the final checks
       logger.debug(`[${uniqueSessionId}] Waiting 1 additional second before finalizing login process`);
       await setTimeoutPromise(1000);
     }
@@ -265,7 +265,7 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
       }
     }
 
-    // Entscheidung basierend auf den ermittelten Informationen
+    // Decision based on the determined information
     if (impervaBlocked) {
       logger.warn(`[${uniqueSessionId}] Imperva/IP block detected during login => returning "IP_BLOCKED"`);
       return { error: "IP_BLOCKED" };

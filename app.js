@@ -5,16 +5,16 @@ const bodyParser = require('body-parser');
 const loginRoute = require('./api/login');
 const logger = require('./utils/logger');
 const { DEFAULT_TIMEOUT } = require("./config/constants");
-require('dotenv').config(); // Füge dies hinzu, wenn du .env-Dateien verwendest
+require('dotenv').config(); // Add this if you are using .env files
 (async () => {
   logger.info("Logging process.env:");
   logger.info(JSON.stringify(process.env, null, 2));
   const massencheckEnabled = process.env.MASSENCHECK_ENABLED ? process.env.MASSENCHECK_ENABLED.toLowerCase() === 'true' : true; // Default to true if not set
   if (massencheckEnabled) {
-    logger.info('Starte Massen-Check der Proxies gegen https://www.pokemon.com/us/pokemon-trainer-club/login');
-    logger.info('Massen-Check abgeschlossen');
+    logger.info('Starting mass check of proxies against https://www.pokemon.com/us/pokemon-trainer-club/login');
+    logger.info('Mass check completed');
   } else {
-    logger.info('Massen-Check der Proxies übersprungen (deaktiviert durch Umgebungsvariable MASSENCHECK_ENABLED)');
+    logger.info('Mass check of proxies skipped (disabled by environment variable MASSENCHECK_ENABLED)');
   }
   
 const app = express();
@@ -25,7 +25,7 @@ app.use(bodyParser.json());
 // Mount the login route
 app.use('/api/v1/login-code', loginRoute);
 
-// Allgemeiner Fehlerhandler
+// General error handler
 app.use((err, req, res, next) => {
   logger.error(`Global error handler: ${err.stack}`);
   res.status(500).json({

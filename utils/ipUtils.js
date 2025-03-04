@@ -42,7 +42,7 @@ logger.setRequestId = (requestId) => {
   logger.defaultMeta = { requestId }; 
 };
 
-// Zusätzlicher Debug-Log beim Initialisieren des Loggers
+// Additional debug log when initializing the logger
 logger.debug(`Logger initialized with log level: ${logLevel}`);
 
 module.exports = logger;

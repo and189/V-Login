@@ -6,7 +6,7 @@ const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
 const { getNextProxy } = require('../utils/proxyPool');
 
-// Konfigurierbarer Wert – Standard: 1 gleichzeitiger Login
+// Configurable value - Default: 1 concurrent login
 // Log process.env.MAX_CONCURRENT_LOGINS before parsing
 logger.info(`process.env.MAX_CONCURRENT_LOGINS: ${process.env.MAX_CONCURRENT_LOGINS}`);
 const maxConcurrentLogins = +process.env.MAX_CONCURRENT_LOGINS || 2;
@@ -86,7 +86,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Unterscheide hier anhand des spezifischen Fehlertyps:
+    // Differentiate here based on the specific error type:
     if (result.error) {
       let statusCode = 500; // Default status code
       switch (result.error) {
@@ -119,7 +119,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Fallback: Sollte weder Token noch spezifischer Fehler zurückgegeben worden sein
+    // Fallback: If neither token nor specific error has been returned
     logger.error(`[Request ID: ${requestId}] No token found unexpectedly`);
     return res.status(500).json({
       status: AuthResponseStatus.ERROR,

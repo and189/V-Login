@@ -32,8 +32,8 @@ async function loginWithRetry(url, username, password, proxy) {
   logger.debug(`Attempt #1 result: ${JSON.stringify(result)}`);
   await browser1.stopBrowser(); // Stop browser after attempt
 
-  // Falls ein Proxy verwendet wurde, melden wir hier das Ergebnis.
-  // Wenn der Login-Versuch einen Token liefert oder einen Fehlercode, der auf funktionierende Proxy-Arbeit hinweist (200, 418 oder 400), wird der Proxy als erfolgreich gewertet.
+  // If a proxy was used, we report the result here.
+  // If the login attempt returns a token or an error code that indicates working proxy operation (200, 418 or 400), the proxy is considered successful.
   if (proxy) {
     if (result.token || ["ACCOUNT_BANNED", "INVALID_CREDENTIALS", "LOGIN_FAILED", "ACCOUNT_DISABLED"].includes(result.error)) {
       reportProxySuccess(proxy);
@@ -44,16 +44,16 @@ async function loginWithRetry(url, username, password, proxy) {
     }
   }
 
-  // Überprüfen, ob Fehler wie "IP_BLOCKED" oder "NAVIGATION_TIMEOUT" vorliegen.
+  // Check if errors such as "IP_BLOCKED" or "NAVIGATION_TIMEOUT" exist.
   if (result.error === "IP_BLOCKED" || result.error === "NAVIGATION_TIMEOUT") {
     logger.warn(`Error type "${result.error}" detected. Attempting immediate switch to another proxy...`);
 
-    // Hole einen neuen Proxy aus dem Pool.
+    // Get a new proxy from the pool.
     logger.debug("Fetching a new proxy from the proxy pool...");
     const newProxy = await getNextProxy();
     if (!newProxy) {
       logger.error("No more proxies available in the pool. Aborting login retry.");
-      return result; // Kein weiterer Proxy vorhanden – ursprüngliches Ergebnis zurückgeben.
+      return result; // No further proxy available - return original result.
     }
 
     logger.info(`Switching to new proxy: ${newProxy}`);
@@ -66,7 +66,7 @@ async function loginWithRetry(url, username, password, proxy) {
     logger.debug(`Attempt #2 result: ${JSON.stringify(result)}`);
     await browser2.stopBrowser(); // Stop browser after attempt
 
-    // Auch hier melden wir das Ergebnis anhand des verwendeten Proxies.
+    // Here, too, we report the result based on the proxy used.
     if (result.token || ["ACCOUNT_BANNED", "INVALID_CREDENTIALS", "LOGIN_FAILED", "ACCOUNT_DISABLED"].includes(result.error)) {
       reportProxySuccess(newProxy);
       logger.debug(`Proxy ${newProxy} marked as success on attempt #2.`);

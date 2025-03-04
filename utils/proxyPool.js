@@ -19,7 +19,7 @@ const PROXIES_TXT_FILE = path.join(process.cwd(), 'proxy_data/proxies.txt');
 let proxyList = [];
 let proxyStats = {};
 
-// Hilfsfunktion zum Warten
+// Helper function to wait
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -52,7 +52,7 @@ function loadProxyStats() {
       const content = fs.readFileSync(PROXY_STATS_FILE, 'utf8');
       proxyStats = JSON.parse(content);
       logger.debug('Proxy stats loaded successfully');
-      // Aktualisiere ggf. alte Einträge: Setze den Cooldown mindestens auf den Standardwert
+      // Update old entries if necessary: Set the cooldown to at least the default value
       Object.keys(proxyStats).forEach(proxy => {
         if (proxyStats[proxy].cooldown < DEFAULT_LOCK_DURATION_MS) {
           logger.debug(`Updating cooldown for ${proxy} from ${proxyStats[proxy].cooldown} to ${DEFAULT_LOCK_DURATION_MS}`);
@@ -86,7 +86,7 @@ function saveProxyStats() {
 }
 
 // ------------------------------------
-// 2.5. Fehlerstatistik verfallen lassen (Decay)
+// 2.5. Let error statistics expire (Decay)
 // ------------------------------------
 function decayProxyStats() {
   const now = Date.now();
@@ -130,14 +130,14 @@ async function getNextProxy() {
   }
 
   const now = Date.now();
-  // Erstelle eine Liste mit Proxies, die entsperrt sind.
+  // Create a list of proxies that are unlocked.
   const unlockedProxies = proxyList.filter(proxy => {
     const stats = getStatsForProxy(proxy);
     return (stats.lastUsed + stats.cooldown) < now;
   });
 
   if (unlockedProxies.length === 0) {
-    // Warte, bis der kürzeste Cooldown abläuft
+    // Wait until the shortest cooldown expires
     let minRemaining = Infinity;
     let candidate = null;
     proxyList.forEach(proxy => {
@@ -153,7 +153,7 @@ async function getNextProxy() {
     return getNextProxy(); // Erneuter Aufruf
   }
 
-  // Gewichtete Auswahl: Proxies mit niedrigeren Cooldown-Werten bekommen höhere Chance.
+  // Weighted selection: Proxies with lower cooldown values get a higher chance.
   const weightedProxies = [];
   unlockedProxies.forEach(proxy => {
     const stats = getStatsForProxy(proxy);
@@ -256,7 +256,7 @@ function getProxyAuthHeaders(proxyUrl) {
 logger.debug('Initializing proxy pool: Loading proxies and proxy stats');
 loadProxies();
 loadProxyStats();
-// Optional: Regelmäßiges Decay der Proxy-Statistiken (z.B. alle Stunde)
+// Optional: Regularly decay the proxy statistics (e.g. every hour)
 setInterval(decayProxyStats, DECAY_INTERVAL_MS);
 
 module.exports = {

@@ -7,7 +7,7 @@ const launchOptions = {
   ],
   headless: false,
   defaultViewport: { width: 1280, height: 800 },
-  // Weitere Puppeteer-Launch-Optionen hier möglich
+  // Further Puppeteer launch options possible here
 };
 
 module.exports = {
