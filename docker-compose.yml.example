@@ -17,6 +17,7 @@ services:
       - "5090:5090"
     volumes:
       - ./proxy_data:/app/proxy_data
+    env_file: .env
     environment:
       - NODE_ENV=production
       - WRITE_DIR=/app
