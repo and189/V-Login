@@ -18,7 +18,7 @@ async function loginWithRetry(url, username, password, proxy) {
   logger.info("Starting initial login attempt...");
 
   if (proxy) {
-    logger.debug(`Initial attempt will use provided proxy: ${await proxy}`);
+    logger.debug(`Initial attempt will use provided proxy: ${proxy}`);
   } else {
     logger.debug("Initial attempt will use local IP (no proxy provided)");
   }
@@ -33,8 +33,9 @@ async function loginWithRetry(url, username, password, proxy) {
   await browser1.stopBrowser(); // Stop browser after attempt
 
   // Falls ein Proxy verwendet wurde, melden wir hier das Ergebnis.
+  // Wenn der Login-Versuch einen Token liefert oder einen Fehlercode, der auf funktionierende Proxy-Arbeit hinweist (200, 418 oder 400), wird der Proxy als erfolgreich gewertet.
   if (proxy) {
-    if (result.token) {
+    if (result.token || ["ACCOUNT_BANNED", "INVALID_CREDENTIALS", "LOGIN_FAILED", "ACCOUNT_DISABLED"].includes(result.error)) {
       reportProxySuccess(proxy);
       logger.debug(`Proxy ${proxy} marked as success on attempt #1.`);
     } else {
@@ -55,7 +56,7 @@ async function loginWithRetry(url, username, password, proxy) {
       return result; // Kein weiterer Proxy vorhanden – ursprüngliches Ergebnis zurückgeben.
     }
 
-    logger.info(`Switching to new proxy: ${await newProxy}`);
+    logger.info(`Switching to new proxy: ${newProxy}`);
     // Attempt #2 with new proxy.
     logger.debug("Attempt #2: Creating Browser instance with new proxy and starting browser...");
     const browser2 = new Browser({ proxy: newProxy }); // Instantiate Browser with proxy
@@ -66,7 +67,7 @@ async function loginWithRetry(url, username, password, proxy) {
     await browser2.stopBrowser(); // Stop browser after attempt
 
     // Auch hier melden wir das Ergebnis anhand des verwendeten Proxies.
-    if (result.token) {
+    if (result.token || ["ACCOUNT_BANNED", "INVALID_CREDENTIALS", "LOGIN_FAILED", "ACCOUNT_DISABLED"].includes(result.error)) {
       reportProxySuccess(newProxy);
       logger.debug(`Proxy ${newProxy} marked as success on attempt #2.`);
     } else {
@@ -78,7 +79,7 @@ async function loginWithRetry(url, username, password, proxy) {
   }
 
   logger.info("Login attempt completed.");
-  return result;
+  return { result, attempts: proxy ? 2 : 1 };
 }
 
 module.exports = { loginWithRetry };

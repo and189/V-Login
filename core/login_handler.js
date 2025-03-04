@@ -93,9 +93,7 @@ async function logLoginButton(page, uniqueSessionId) {
  * @param {string} username - Login username
  * @param {string} password - Login password
  * @param {string} [uniqueSessionId] - Optional unique session ID (auto-generated if not provided)
- * @returns {Promise<string>} - Mögliche Rückgaben:
- *    - ory-code (string) bei Erfolg
- *    - "ACCOUNT_BANNED", "IP_BLOCKED", "INVALID_CREDENTIALS", "ACCOUNT_DISABLED" oder "LOGIN_FAILED"
+ * @returns {Promise<Object>} - Rückgabeobjekt: { token: <ory-code> } bei Erfolg oder { error: <Fehlercode> }
  */
 async function performLogin(page, username, password, uniqueSessionId = uuidv4()) {
   logger.debug(`[${uniqueSessionId}] Starting performLogin with username: ${username}`);
@@ -148,9 +146,9 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
   logger.debug(`[${uniqueSessionId}] Attaching response listener for login process`);
   page.on('response', responseListener);
 
-  // Globalen Timeout setzen (90 Sekunden)
+  // Globalen Timeout setzen (59 Sekunden)
   let timeoutHandle;
-  const globalTimeout = 90000;
+  const globalTimeout = 59000;
   const timeoutPromise = new Promise((_, reject) => {
     timeoutHandle = setTimeout(() => {
       reject(new Error('Global login timeout reached'));
@@ -175,7 +173,6 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
       logger.debug(`[${uniqueSessionId}] Username typed successfully`);
     } catch (err) {
       logger.warn(`[${uniqueSessionId}] Could not find 'input#email': ${err.message}`);
-      // Alle input-Felder auslesen
       await debugAvailableInputs(page, uniqueSessionId);
       throw err;
     }
@@ -190,7 +187,6 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
       logger.debug(`[${uniqueSessionId}] Password typed successfully`);
     } catch (err) {
       logger.warn(`[${uniqueSessionId}] Could not find 'input#password': ${err.message}`);
-      // Alle input-Felder auslesen
       await debugAvailableInputs(page, uniqueSessionId);
       throw err;
     }
@@ -199,7 +195,6 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
     logger.debug(`[${uniqueSessionId}] Waiting 1 second after entering credentials`);
     await setTimeoutPromise(1000);
 
-    // Vor dem Klick prüfen, ob bereits ein ory-code gefunden wurde
     if (foundCode) {
       logger.info(`[${uniqueSessionId}] ory-code already found before login click: ${foundCode}`);
     } else {
@@ -212,7 +207,6 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
         await page.click(loginButtonSelector, { delay: 100 });
       } catch (err) {
         logger.warn(`[${uniqueSessionId}] Could not find login button '${loginButtonSelector}': ${err.message}`);
-        // Falls Button nicht gefunden, alle Buttons ausgeben
         await debugAvailableButtons(page, uniqueSessionId);
         throw err;
       }
@@ -220,7 +214,6 @@ async function performLogin(page, username, password, uniqueSessionId = uuidv4()
       // Wartezeit nach Klick
       logger.debug(`[${uniqueSessionId}] Waiting 1 second after login button click`);
       await setTimeoutPromise(1000);
-
       logger.info(`[${uniqueSessionId}] URL after login click: ${page.url()}`);
 
       // Falls eine Consent-Seite erkannt wird, diese behandeln

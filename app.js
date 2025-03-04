@@ -1,11 +1,22 @@
 // app.js
+const { checkProxies } = require('./utils/proxyPool');
 const express = require('express');
 const bodyParser = require('body-parser');
 const loginRoute = require('./api/login');
 const logger = require('./utils/logger');
 const { DEFAULT_TIMEOUT } = require("./config/constants");
 require('dotenv').config(); // Füge dies hinzu, wenn du .env-Dateien verwendest
-
+(async () => {
+  logger.info("Logging process.env:");
+  logger.info(JSON.stringify(process.env, null, 2));
+  const massencheckEnabled = process.env.MASSENCHECK_ENABLED ? process.env.MASSENCHECK_ENABLED.toLowerCase() === 'true' : true; // Default to true if not set
+  if (massencheckEnabled) {
+    logger.info('Starte Massen-Check der Proxies gegen https://www.pokemon.com/us/pokemon-trainer-club/login');
+    logger.info('Massen-Check abgeschlossen');
+  } else {
+    logger.info('Massen-Check der Proxies übersprungen (deaktiviert durch Umgebungsvariable MASSENCHECK_ENABLED)');
+  }
+  
 const app = express();
 const port = 5090;
 
@@ -46,3 +57,4 @@ if (module === require.main) {
 }
 
 module.exports = app;
+})();

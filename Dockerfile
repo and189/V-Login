@@ -1,65 +1,57 @@
-# Basis-Image auf Alpine-Basis
-FROM node:18-alpine AS base
-
-# Spiegel-Repository für APK (optional, hier z. B. USTC)
-RUN set -eux && sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories && \
-    apk add --no-cache libc6-compat
-
-# Wechsel zum npm-Registry-Spiegel (optional)
-RUN npm config set registry https://registry.npmmirror.com/ && \
-    npm install -g pnpm
-
-# Arbeitsverzeichnis festlegen
-WORKDIR /app
-
-# Kopiere package.json und pnpm-lock.yaml und installiere Abhängigkeiten
-COPY package*.json pnpm-lock.yaml ./
-RUN pnpm install
-
-# Kopiere den Rest des Quellcodes
-COPY . .
-
-
-
-FROM node:18-alpine AS base
+# Basis-Image auf Alpine-Basis (Base image based on Alpine)
+FROM node:lts-alpine AS base
 
 # Define build arguments for user and group IDs
 ARG DOCKER_USER_ID=1000
 ARG DOCKER_GROUP_ID=1000
 
-# Spiegel-Repository für APK (optional, hier z. B. USTC)
-RUN set -eux && sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories && \
-    apk add --no-cache libc6-compat
-
-# Wechsel zum npm-Registry-Spiegel (optional)
-RUN npm config set registry https://registry.npmmirror.com/ && \
-    npm install -g pnpm
-
-# Arbeitsverzeichnis festlegen
+# Arbeitsverzeichnis festlegen (Set working directory)
 WORKDIR /app
 
-# Kopiere package.json und pnpm-lock.yaml und installiere Abhängigkeiten
-COPY package*.json pnpm-lock.yaml ./
+# Create non-root user and group, set /app ownership, switch to non-root user in base stage (Create user, set permissions, switch user)
+RUN mkdir proxy_data && addgroup appuser \
+    && adduser -G appuser -s /bin/sh -D appuser \
+    && chown -R appuser:appuser /app \
+    && chown -R appuser:appuser proxy_data # Ensure proxy_data ownership early
+
+# Spiegel-Repository für APK (optional) und npm/pnpm Setup in one RUN command to minimize layers (Mirror and npm/pnpm setup)
+RUN set -eux \
+    && sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories \
+    && apk add --no-cache libc6-compat \
+    && npm config set registry https://registry.npmmirror.com/ \
+    && npm install -g pnpm
+
+# Kopiere package.json und pnpm-lock.yaml und installiere Abhängigkeiten with --chown (Copy package files and install dependencies)
+USER appuser
+COPY --chown=appuser:appuser package*.json pnpm-lock.yaml ./
 RUN pnpm install
 
-# Kopiere den Rest des Quellcodes
-COPY . .
+# Kopiere den Rest des Quellcodes with --chown (Copy the rest of the source code)
+COPY --chown=appuser:appuser . .
 
 
-
-# Change ownership of proxy_data to user specified by DOCKER_USER_ID and DOCKER_GROUP_ID
-RUN chown -R ${DOCKER_USER_ID}:${DOCKER_GROUP_ID} proxy_data
-# Runner-Stage: Verwende dasselbe Basis-Image und kopiere die notwendigen Dateien
-FROM node:18-alpine AS runner
+# Runner-Stage: Definiere die Runner-Stage für kleinere finale Images (Runner stage for smaller final image)
+FROM node:lts-alpine AS runner
 WORKDIR /app
+RUN addgroup appuser && adduser -G appuser -s /bin/sh -D appuser
 COPY --from=base /app/node_modules ./node_modules
-COPY --from=base /app .
+# Copy only necessary application files, explicitly listing directories and files (Copy only necessary files)
+COPY --from=base /app/app.js ./
+COPY --from=base /app/api ./api
+COPY --from=base /app/config ./config
+COPY --from=base /app/core ./core
+COPY --from=base /app/proxy_data ./proxy_data
+COPY --from=base /app/squid ./squid
+COPY --from=base /app/utils ./utils
+COPY --from=base /app/package.json ./
+COPY --from=base /app/pnpm-lock.yaml ./
 
-# Optional: Sicherstellen, dass der Container als root läuft (REMOVED)
-# USER root
 
-# Exponiere den Port, auf dem deine App lauscht (hier 5090)
+# Switch to the non-root user to run the application in runner stage as well (redundant but explicit) (Switch user in runner stage)
+USER appuser
+
+# Exponiere den Port, auf dem deine App lauscht (hier 5090) (Expose port)
 EXPOSE 5090
 
-# Standard-Startbefehl
+# Standard-Startbefehl (Default command)
 CMD ["node", "app.js"]

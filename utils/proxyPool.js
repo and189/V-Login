@@ -9,6 +9,7 @@ const logger = require('./logger');
 const DEFAULT_LOCK_DURATION_MS = 15 * 60 * 1000; // 15 Min
 const MAX_LOCK_DURATION_MS = 12 * 60 * 60 * 1000; // 12 Stunden
 const FAILURE_MULTIPLIER = 2;
+const DECAY_INTERVAL_MS = 60 * 60 * 1000; // 1 Stunde, nach der sich Fehlerraten etwas zurückbilden
 const PROXY_STATS_FILE = 'proxy_data/proxyStats.json';
 const PROXIES_TXT_FILE = path.join(process.cwd(), 'proxy_data/proxies.txt');
 
@@ -30,7 +31,6 @@ function loadProxies() {
   logger.debug(`Loading proxies from ${PROXIES_TXT_FILE}`);
   try {
     const fileContent = fs.readFileSync(PROXIES_TXT_FILE, 'utf8');
-    // Aufbereitung: Leerzeilen entfernen, trimmen und URL korrigieren
     proxyList = fileContent
       .split('\n')
       .map(line => line.trim())
@@ -52,7 +52,7 @@ function loadProxyStats() {
       const content = fs.readFileSync(PROXY_STATS_FILE, 'utf8');
       proxyStats = JSON.parse(content);
       logger.debug('Proxy stats loaded successfully');
-      // Aktualisiere ggf. alte Einträge: Falls gespeicherter Cooldown kleiner als DEFAULT_LOCK_DURATION_MS ist
+      // Aktualisiere ggf. alte Einträge: Setze den Cooldown mindestens auf den Standardwert
       Object.keys(proxyStats).forEach(proxy => {
         if (proxyStats[proxy].cooldown < DEFAULT_LOCK_DURATION_MS) {
           logger.debug(`Updating cooldown for ${proxy} from ${proxyStats[proxy].cooldown} to ${DEFAULT_LOCK_DURATION_MS}`);
@@ -73,14 +73,11 @@ function loadProxyStats() {
 function saveProxyStats() {
   logger.debug('Saving proxy stats...');
   try {
-    // Schreibe zuerst in eine temporäre Datei
     const tempFile = PROXY_STATS_FILE + '.tmp';
     const data = JSON.stringify(proxyStats, null, 2);
     fs.writeFileSync(tempFile, data, { encoding: 'utf8' });
-    // Check if the temp file exists and is not empty
     const tempFileStats = fs.statSync(tempFile);
     logger.debug(`Temp file ${tempFile} size: ${tempFileStats.size}`);
-    // Atomarer Umzug der temporären Datei
     fs.renameSync(tempFile, PROXY_STATS_FILE);
     logger.debug('Proxy stats saved successfully');
   } catch (err) {
@@ -89,18 +86,32 @@ function saveProxyStats() {
 }
 
 // ------------------------------------
-// 3. Choose a Proxy und Reporte jede Nutzung
+// 2.5. Fehlerstatistik verfallen lassen (Decay)
 // ------------------------------------
-/**
- * Liefert oder initialisiert die Statistik für einen Proxy.
- */
+function decayProxyStats() {
+  const now = Date.now();
+  Object.keys(proxyStats).forEach(proxy => {
+    const stats = proxyStats[proxy];
+    if (now - stats.lastUsed > DECAY_INTERVAL_MS && stats.failCount > 0) {
+      stats.failCount = Math.max(stats.failCount - 1, 0);
+      // Optional: auch cooldown leicht zurücksetzen
+      stats.cooldown = Math.max(DEFAULT_LOCK_DURATION_MS, stats.cooldown / FAILURE_MULTIPLIER);
+    }
+  });
+  saveProxyStats();
+  logger.debug('Decayed proxy stats');
+}
+
+// ------------------------------------
+// 3. Auswahl und Reporting
+// ------------------------------------
 function getStatsForProxy(proxy) {
   if (!proxyStats[proxy]) {
     proxyStats[proxy] = {
       cooldown: DEFAULT_LOCK_DURATION_MS,
       successCount: 0,
       failCount: 0,
-      useCount: 0, // Zähler für jede Nutzung
+      useCount: 0,
       lastUsed: 0
     };
   }
@@ -108,29 +119,25 @@ function getStatsForProxy(proxy) {
 }
 
 /**
- * Wählt einen aktuell entsperrten Proxy aus.
- * Ein Proxy gilt als "gesperrt", wenn (lastUsed + cooldown) noch in der Zukunft liegt.
- * Falls keine Proxies entsperrt sind, wartet die Funktion bis zum Ende des kürzesten Cooldowns.
- * In diesem Fall wird zusätzlich der Fail-Counter für den Kandidaten erhöht.
- * Die Nutzung wird gemeldet, indem useCount erhöht und lastUsed aktualisiert wird.
+ * Wählt einen Proxy basierend auf einem einfachen Gewichtungssystem aus.
+ * Proxies mit kürzerem Cooldown und niedrigeren Fehlerraten werden bevorzugt.
  */
 async function getNextProxy() {
-  logger.debug('getNextProxy: Attempting to choose an unlocked proxy');
+  logger.debug('getNextProxy: Selecting an available proxy');
   if (proxyList.length === 0) {
     logger.warn('getNextProxy: Proxy list is empty');
     return null;
   }
 
   const now = Date.now();
-
-  // Filtere Proxies, deren Cooldown abgelaufen ist
-  let unlockedProxies = proxyList.filter(proxy => {
+  // Erstelle eine Liste mit Proxies, die entsperrt sind.
+  const unlockedProxies = proxyList.filter(proxy => {
     const stats = getStatsForProxy(proxy);
     return (stats.lastUsed + stats.cooldown) < now;
   });
 
   if (unlockedProxies.length === 0) {
-    // Falls keine Proxies entsperrt sind, ermittele den minimal verbleibenden Zeitraum
+    // Warte, bis der kürzeste Cooldown abläuft
     let minRemaining = Infinity;
     let candidate = null;
     proxyList.forEach(proxy => {
@@ -143,40 +150,29 @@ async function getNextProxy() {
     });
     logger.warn(`No unlocked proxies available. Waiting for ${minRemaining}ms...`);
     await sleep(minRemaining);
-    const nowAfter = Date.now();
-    unlockedProxies = proxyList.filter(proxy => {
-      const stats = getStatsForProxy(proxy);
-      return (stats.lastUsed + stats.cooldown) < nowAfter;
-    });
-    if (unlockedProxies.length === 0) {
-      // Falls immer noch keine entsperrt sind, nutze den Kandidaten und vermerke den Fehler.
-      logger.warn("Even after waiting, no proxy fully unlocked. Using candidate anyway.");
-      reportProxyFailure(candidate); // Failcounter + 1 und Cooldown anpassen
-      const stats = getStatsForProxy(candidate);
-      stats.useCount++;
-      stats.lastUsed = Date.now();
-      saveProxyStats();
-      logger.debug(`getNextProxy: Proxy ${candidate} used ${stats.useCount} times, locked until ${stats.lastUsed + stats.cooldown}`);
-      return candidate;
-    }
+    return getNextProxy(); // Erneuter Aufruf
   }
 
-  // Zufällige Auswahl aus den entsperrten Proxies
-  const chosenProxy = unlockedProxies[Math.floor(Math.random() * unlockedProxies.length)];
-  logger.debug(`getNextProxy: Chosen proxy: ${chosenProxy}`);
+  // Gewichtete Auswahl: Proxies mit niedrigeren Cooldown-Werten bekommen höhere Chance.
+  const weightedProxies = [];
+  unlockedProxies.forEach(proxy => {
+    const stats = getStatsForProxy(proxy);
+    // Gewicht: inverse des aktuellen Cooldown (kleiner = besser)
+    const weight = DEFAULT_LOCK_DURATION_MS / stats.cooldown;
+    const weightInt = Math.max(Math.floor(weight * 10), 1); // mind. 1
+    for (let i = 0; i < weightInt; i++) {
+      weightedProxies.push(proxy);
+    }
+  });
+  const chosenProxy = weightedProxies[Math.floor(Math.random() * weightedProxies.length)];
   const stats = getStatsForProxy(chosenProxy);
   stats.useCount++;
   stats.lastUsed = Date.now();
   saveProxyStats();
-  logger.debug(`getNextProxy: Proxy ${chosenProxy} used ${stats.useCount} times, locked until ${stats.lastUsed + stats.cooldown}`);
+  logger.debug(`getNextProxy: Chosen proxy: ${chosenProxy} (used ${stats.useCount} times)`);
   return chosenProxy;
 }
 
-/**
- * Meldet einen Proxy-Fehler:
- * - Erhöht failCount und verdoppelt den Cooldown (bis zu einem Maximum)
- * - Aktualisiert lastUsed
- */
 function reportProxyFailure(proxy) {
   logger.debug(`reportProxyFailure: Reporting failure for proxy: ${proxy}`);
   const now = Date.now();
@@ -190,21 +186,15 @@ function reportProxyFailure(proxy) {
   }
   stats.cooldown = newCooldown;
   stats.lastUsed = now;
-  logger.debug(`reportProxyFailure: Proxy ${proxy} new cooldown: ${newCooldown}ms until ${stats.lastUsed + newCooldown}`);
+  logger.debug(`reportProxyFailure: Proxy ${proxy} new cooldown: ${newCooldown}ms`);
   saveProxyStats();
 }
 
-/**
- * Meldet einen Proxy-Erfolg:
- * - Erhöht successCount
- * - Setzt den Cooldown auf den Standardwert zurück
- * - Aktualisiert lastUsed
- */
 function reportProxySuccess(proxy) {
   logger.debug(`reportProxySuccess: Reporting success for proxy: ${proxy}`);
   const now = Date.now();
   const stats = getStatsForProxy(proxy);
-  logger.info(`reportProxySuccess: Reporting success for proxy: ${proxy}. Current successCount: ${stats.successCount}`);
+  logger.info(`reportProxySuccess: Proxy ${proxy}. Current successCount: ${stats.successCount}`);
   stats.successCount += 1;
   logger.info(`reportProxySuccess: Proxy ${proxy}. New successCount: ${stats.successCount}`);
   stats.cooldown = DEFAULT_LOCK_DURATION_MS;
@@ -216,11 +206,6 @@ function reportProxySuccess(proxy) {
 // ------------------------------------
 // 4. Proxy URL / Auth
 // ------------------------------------
-/**
- * Korrigiert die Proxy-URL:
- * - Fügt ggf. "http://" hinzu
- * - Codiert Benutzername und Passwort, falls vorhanden
- */
 function fixProxyUrl(proxyUrl) {
   if (!proxyUrl.includes('://')) {
     proxyUrl = 'http://' + proxyUrl;
@@ -238,21 +223,16 @@ function fixProxyUrl(proxyUrl) {
   const colonIndex = credentials.indexOf(':');
   if (colonIndex === -1) {
     const encodedUsername = encodeURIComponent(credentials);
-    const fixedUrl = protocol + encodedUsername + '@' + hostPart;
-    return fixedUrl;
+    return protocol + encodedUsername + '@' + hostPart;
   } else {
     const username = credentials.slice(0, colonIndex);
     const password = credentials.slice(colonIndex + 1);
     const encodedUsername = encodeURIComponent(username);
     const encodedPassword = encodeURIComponent(password);
-    const fixedUrl = protocol + encodedUsername + ':' + encodedPassword + '@' + hostPart;
-    return fixedUrl;
+    return protocol + encodedUsername + ':' + encodedPassword + '@' + hostPart;
   }
 }
 
-/**
- * Gibt die Proxy-Authentifizierungs-Header zurück, falls Benutzername/Passwort vorhanden sind.
- */
 function getProxyAuthHeaders(proxyUrl) {
   logger.debug(`getProxyAuthHeaders: Getting auth headers for proxy: ${proxyUrl}`);
   try {
@@ -276,6 +256,8 @@ function getProxyAuthHeaders(proxyUrl) {
 logger.debug('Initializing proxy pool: Loading proxies and proxy stats');
 loadProxies();
 loadProxyStats();
+// Optional: Regelmäßiges Decay der Proxy-Statistiken (z.B. alle Stunde)
+setInterval(decayProxyStats, DECAY_INTERVAL_MS);
 
 module.exports = {
   getNextProxy,

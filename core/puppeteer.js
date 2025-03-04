@@ -134,7 +134,7 @@ class Browser {
     }
 
     // Browserless-WebSocket-Endpunkt – nur mit Proxy-Parameter, keine weiteren Systemparameter
-    let wsEndpoint = "ws://localhost:8848";
+    let wsEndpoint = "ws://browserless:3000";
     if (selectedProxy) {
       wsEndpoint += `?--proxy-server=${encodeURIComponent(selectedProxy)}`;
     }
@@ -252,7 +252,7 @@ class Browser {
     // Schritt 1: Canvas-Fingerprint prüfen & Screenshot
     await this.page.goto("https://browserleaks.com/canvas", { waitUntil: 'networkidle0' });
     await this.waitForSelectorIfEnabled("#canvas-hash");
-    await this.takeScreenshotIfEnabled("step1-browserleaks.png");
+    // await this.takeScreenshotIfEnabled("step1-browserleaks.png"); // Removed duplicate screenshot
     let content = await this.page.content();
     let match = content.match(/id="canvas-hash".*?>(.*?)<\/td>/);
     console.log(match ? `Canvas fingerprint: ${match[1]}` : "Canvas fingerprint not found.");
@@ -272,7 +272,7 @@ class Browser {
     logger.info(`[${uniqueSessionId}] Navigating to login URL: ${initialAuthUrl}`);
 
     try {
-      await this.page.goto(initialAuthUrl, { waitUntil: 'networkidle0' });
+      await this.page.goto(initialAuthUrl, { waitUntil: 'networkidle0', timeout: DEFAULT_NAVIGATION_TIMEOUT_MS });
       logger.info(`[${uniqueSessionId}] Navigation to login URL completed.`);
     } catch (navigationError) {
       logger.error(`[${uniqueSessionId}] Navigation to login URL failed: ${navigationError.message}`);
@@ -322,20 +322,20 @@ class Browser {
     }
   }
 
-  async fetchBrowserStatus() {
-    try {
-      const response = await axios.get("http://browserless:8848/api/agent/browser/running");
-      console.log(`Browser status response: ${JSON.stringify(response.data)}`);
-      if (response.data && Array.isArray(response.data.data) && response.data.data.length > 0) {
-        const browserInfo = response.data.data[0];
-        console.log(`Browser Info - ProfileID: ${browserInfo.profileId}, Port: ${browserInfo.remoteDebuggingPort}`);
-        return browserInfo;
-      }
-    } catch (error) {
-      console.error('Error fetching Browser status: ' + error.message);
-    }
-    return null;
-  }
+  // async fetchBrowserStatus() {
+  //   try {
+  //     const response = await axios.get("http://browserless:8848/api/agent/browser/running");
+  //     console.log(`Browser status response: ${JSON.stringify(response.data)}`);
+  //     if (response.data && Array.isArray(response.data.data) && response.data.data.length > 0) {
+  //       const browserInfo = response.data.data[0];
+  //       console.log(`Browser Info - ProfileID: ${browserInfo.profileId}, Port: ${browserInfo.remoteDebuggingPort}`);
+  //       return browserInfo;
+  //     }
+  //   } catch (error) {
+  //     console.error('Error fetching browser status: ' + error.message);
+  //   }
+  //   return null;
+  // }
 }
 
 module.exports = Browser;
