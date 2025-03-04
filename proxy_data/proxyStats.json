@@ -115,8 +115,8 @@
     "cooldown": 900000,
     "successCount": 1,
     "failCount": 0,
-    "useCount": 1,
-    "lastUsed": 1741100580783
+    "useCount": 2,
+    "lastUsed": 1741101480800
   },
   "http://104.167.29.55:3128": {
     "cooldown": 3600000,
