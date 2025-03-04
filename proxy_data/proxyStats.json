@@ -302,10 +302,10 @@
   },
   "http://156.228.87.9:3128": {
     "cooldown": 900000,
-    "successCount": 0,
+    "successCount": 1,
     "failCount": 0,
     "useCount": 3,
-    "lastUsed": 1741101348019
+    "lastUsed": 1741101385139
   },
   "http://45.202.77.146:3128": {
     "cooldown": 1800000,
@@ -402,8 +402,8 @@
     "cooldown": 900000,
     "successCount": 0,
     "failCount": 0,
-    "useCount": 2,
-    "lastUsed": 1741100467759
+    "useCount": 3,
+    "lastUsed": 1741101367780
   },
   "http://104.207.60.190:3128": {
     "cooldown": 1800000,
@@ -563,8 +563,8 @@
     "cooldown": 900000,
     "successCount": 0,
     "failCount": 0,
-    "useCount": 2,
-    "lastUsed": 1741100495472
+    "useCount": 3,
+    "lastUsed": 1741101395473
   },
   "http://156.228.95.89:3128": {
     "cooldown": 900000,
@@ -689,8 +689,8 @@
     "cooldown": 900000,
     "successCount": 1,
     "failCount": 1,
-    "useCount": 2,
-    "lastUsed": 1741100485239
+    "useCount": 3,
+    "lastUsed": 1741101395307
   },
   "http://156.228.92.0:3128": {
     "cooldown": 900000,
