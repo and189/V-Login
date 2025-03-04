@@ -1,57 +1,58 @@
 # Basis-Image auf Alpine-Basis (Base image based on Alpine)
 FROM node:lts-alpine AS base
 
-# Define build arguments for user and group IDs
-ARG DOCKER_USER_ID=1000
-ARG DOCKER_GROUP_ID=1000
+# Define build argument for the application ID
+ARG APP_ID=your_default_app_id
+ENV APP_ID=$APP_ID
+
+# Define build arguments for mirrors
+ARG ALPINE_MIRROR=https://dl-cdn.alpinelinux.org
+ARG NPM_REGISTRY=https://registry.npmjs.org/
 
 # Arbeitsverzeichnis festlegen (Set working directory)
 WORKDIR /app
 
-# Create non-root user and group, set /app ownership, switch to non-root user in base stage (Create user, set permissions, switch user)
-RUN mkdir proxy_data && addgroup appuser \
-    && adduser -G appuser -s /bin/sh -D appuser \
-    && chown -R appuser:appuser /app \
-    && chown -R appuser:appuser proxy_data # Ensure proxy_data ownership early
+# Erstelle das Verzeichnis für proxy_data und setze die Besitzrechte auf den Standard-Nutzer "node"
+RUN mkdir proxy_data && chown -R node:node /app
 
-# Spiegel-Repository für APK (optional) und npm/pnpm Setup in one RUN command to minimize layers (Mirror and npm/pnpm setup)
+# Passe die apk-Repositories an, installiere libc6-compat und pnpm
 RUN set -eux \
-    && sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories \
+    && sed -i "s|https://dl-cdn.alpinelinux.org|$ALPINE_MIRROR|g" /etc/apk/repositories \
     && apk add --no-cache libc6-compat \
-    && npm config set registry https://registry.npmmirror.com/ \
+    && npm config set registry $NPM_REGISTRY \
     && npm install -g pnpm
 
-# Kopiere package.json und pnpm-lock.yaml und installiere Abhängigkeiten with --chown (Copy package files and install dependencies)
-USER appuser
-COPY --chown=appuser:appuser package*.json pnpm-lock.yaml ./
+# Wechsel zum nicht-root Standardnutzer "node"
+USER node
+
+# Kopiere package.json und pnpm-lock.yaml und installiere Abhängigkeiten (mit --chown=node:node)
+COPY --chown=node:node package*.json pnpm-lock.yaml ./
 RUN pnpm install
 
-# Kopiere den Rest des Quellcodes with --chown (Copy the rest of the source code)
-COPY --chown=appuser:appuser . .
+# Kopiere den Rest des Quellcodes (mit --chown=node:node)
+COPY --chown=node:node .env .
+COPY --chown=node:node . .
 
-
-# Runner-Stage: Definiere die Runner-Stage für kleinere finale Images (Runner stage for smaller final image)
+# Runner-Stage: Erstelle ein kleineres finales Image
 FROM node:lts-alpine AS runner
 WORKDIR /app
-RUN addgroup appuser && adduser -G appuser -s /bin/sh -D appuser
+
+# Kopiere die notwendigen Dateien vom Base-Image
 COPY --from=base /app/node_modules ./node_modules
-# Copy only necessary application files, explicitly listing directories and files (Copy only necessary files)
 COPY --from=base /app/app.js ./
 COPY --from=base /app/api ./api
 COPY --from=base /app/config ./config
 COPY --from=base /app/core ./core
 COPY --from=base /app/proxy_data ./proxy_data
-COPY --from=base /app/squid ./squid
 COPY --from=base /app/utils ./utils
 COPY --from=base /app/package.json ./
 COPY --from=base /app/pnpm-lock.yaml ./
 
+# Wechsel zum nicht-root Standardnutzer "node"
+USER node
 
-# Switch to the non-root user to run the application in runner stage as well (redundant but explicit) (Switch user in runner stage)
-USER appuser
-
-# Exponiere den Port, auf dem deine App lauscht (hier 5090) (Expose port)
+# Exponiere den Port, auf dem deine App lauscht (hier 5090)
 EXPOSE 5090
 
-# Standard-Startbefehl (Default command)
+# Standard-Startbefehl
 CMD ["node", "app.js"]
